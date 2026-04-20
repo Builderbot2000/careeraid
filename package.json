@@ -1,0 +1,90 @@
+{
+  "name": "career-index",
+  "version": "0.1.0",
+  "description": "Local-first job hunting desktop app",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:dist": "electron-vite build && electron-builder",
+    "postinstall": "electron-rebuild -f -w better-sqlite3 keytar",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.90.0",
+    "better-sqlite3": "^12.0.0",
+    "cheerio": "^1.0.0",
+    "electron-updater": "^6.8.0",
+    "keytar": "^7.9.0",
+    "node-fetch": "^2.7.0",
+    "nunjucks": "^3.2.4",
+    "playwright": "^1.59.0",
+    "rss-parser": "^3.13.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.0.0",
+    "@types/node-fetch": "^2.6.11",
+    "@types/nunjucks": "^3.2.6",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.2"
+  },
+  "build": {
+    "appId": "com.careerindex.app",
+    "productName": "Career Index",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "templates/**/*",
+      "package.json",
+      "node_modules/**/*",
+      "!node_modules/.bin/**/*",
+      "!node_modules/**/CHANGELOG.md",
+      "!node_modules/**/{test,tests,spec,specs,__tests__}/**",
+      "!node_modules/**/*.{md,txt,map}"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office"
+    }
+  }
+}

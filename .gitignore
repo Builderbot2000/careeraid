@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Electron user data (dev)
+dev-app-update.yml
+
+# Build artifacts
+release/
