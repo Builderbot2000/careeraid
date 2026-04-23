@@ -27,22 +27,22 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- ─── Phase 2 ─────────────────────────────────────────────────────────────────
 
--- CREATE TABLE IF NOT EXISTS user_profile (
---   id   INTEGER PRIMARY KEY CHECK(id = 1),
---   yoe  INTEGER
--- );
+CREATE TABLE IF NOT EXISTS user_profile (
+  id   INTEGER PRIMARY KEY CHECK(id = 1),
+  yoe  INTEGER
+);
 
--- CREATE TABLE IF NOT EXISTS profile_entries (
---   id          TEXT PRIMARY KEY,  -- UUID
---   type        TEXT NOT NULL
---     CHECK(type IN ('experience','credential','accomplishment','skill','education')),
---   title       TEXT NOT NULL,
---   content     TEXT NOT NULL,
---   tags        TEXT NOT NULL DEFAULT '[]',  -- JSON array
---   start_date  TEXT,
---   end_date    TEXT,
---   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
--- );
+CREATE TABLE IF NOT EXISTS profile_entries (
+  id          TEXT PRIMARY KEY,  -- UUID
+  type        TEXT NOT NULL
+    CHECK(type IN ('experience','credential','accomplishment','skill','education')),
+  title       TEXT NOT NULL,
+  content     TEXT NOT NULL,
+  tags        TEXT NOT NULL DEFAULT '[]',  -- JSON array
+  start_date  TEXT,
+  end_date    TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 -- ─── Phase 3 ─────────────────────────────────────────────────────────────────
 

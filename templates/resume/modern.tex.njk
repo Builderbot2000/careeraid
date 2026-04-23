@@ -1,0 +1,94 @@
+\documentclass[10pt,a4paper]{article}
+
+% ─── Packages ─────────────────────────────────────────────────────────────────
+\usepackage{geometry}
+\geometry{top=1.5cm, bottom=1.5cm, left=1.8cm, right=1.8cm}
+
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Heros}
+
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{parskip}
+
+\definecolor{accent}{RGB}{30, 64, 175}
+
+\hypersetup{colorlinks=true, urlcolor=accent, hidelinks}
+
+\titleformat{\section}
+  {\color{accent}\large\bfseries}{}{0em}{}[{\color{accent}\titlerule[0.5pt]}]
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+
+\setlist[itemize]{leftmargin=1.5em, itemsep=1pt, parsep=0pt, topsep=2pt}
+\pagestyle{empty}
+
+% ─── Document ─────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Summary ──────────────────────────────────────────────────────────────────
+\section*{\color{accent}Profile}
+{{ summary }}
+
+% ── Experience ───────────────────────────────────────────────────────────────
+{% if experience %}
+\section{Experience}
+{% for job in experience %}
+\noindent
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+  \textbf{ {{- job.role -}} } & \textit{\small {{- job.start_date -}} -- {{- job.end_date -}} } \\
+  \textit{\color{accent} {{- job.company -}} } & \\
+\end{tabularx}
+\vspace{-6pt}
+\begin{itemize}
+{% for bullet in job.bullets %}
+  \item {{ bullet }}
+{% endfor %}
+\end{itemize}
+{% if not loop.last %}\vspace{4pt}{% endif %}
+{% endfor %}
+{% endif %}
+
+% ── Skills ───────────────────────────────────────────────────────────────────
+{% if skills.languages or skills.frameworks or skills.tools %}
+\section{Skills}
+\begin{tabularx}{\linewidth}{@{} l X @{}}
+{% if skills.languages %}
+  \textbf{Languages} & {{ skills.languages | join(' \textbullet\ ') }} \\
+{% endif %}
+{% if skills.frameworks %}
+  \textbf{Frameworks} & {{ skills.frameworks | join(' \textbullet\ ') }} \\
+{% endif %}
+{% if skills.tools %}
+  \textbf{Tools} & {{ skills.tools | join(' \textbullet\ ') }} \\
+{% endif %}
+\end{tabularx}
+{% endif %}
+
+% ── Education ────────────────────────────────────────────────────────────────
+{% if education %}
+\section{Education}
+{% for edu in education %}
+\noindent
+\begin{tabularx}{\linewidth}{@{}X r@{}}
+  \textbf{ {{- edu.institution -}} } & \textit{\small {{- edu.year -}} } \\
+  \textit{ {{- edu.degree -}} } & \\
+\end{tabularx}
+{% if not loop.last %}\medskip{% endif %}
+{% endfor %}
+{% endif %}
+
+% ── Credentials ──────────────────────────────────────────────────────────────
+{% if credentials and credentials | length > 0 %}
+\section{Credentials}
+\begin{itemize}
+{% for c in credentials %}
+  \item {{ c }}
+{% endfor %}
+\end{itemize}
+{% endif %}
+
+\end{document}

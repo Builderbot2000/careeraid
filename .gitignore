@@ -5,6 +5,10 @@ dist/
 *.log
 *.tsbuildinfo
 
+# Local env overrides — copy .env.example → .env and fill in values
+.env
+.env.local
+
 # Electron user data (dev)
 dev-app-update.yml
 

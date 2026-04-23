@@ -1,0 +1,85 @@
+\documentclass[11pt,a4paper]{article}
+
+% ─── Packages ─────────────────────────────────────────────────────────────────
+\usepackage{geometry}
+\geometry{top=1.8cm, bottom=1.8cm, left=2cm, right=2cm}
+
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}
+
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{parskip}
+
+\hypersetup{
+  colorlinks=true,
+  urlcolor=black,
+  hidelinks
+}
+
+% Compact section headings
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+
+\setlist[itemize]{leftmargin=1.5em, itemsep=1pt, parsep=0pt, topsep=2pt}
+\pagestyle{empty}
+
+% ─── Document ─────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ── Summary ──────────────────────────────────────────────────────────────────
+\section*{Profile}
+{{ summary }}
+
+% ── Experience ───────────────────────────────────────────────────────────────
+{% if experience %}
+\section{Experience}
+{% for job in experience %}
+\noindent\textbf{ {{- job.role -}} } \hfill \textit{ {{- job.start_date -}} -- {{- job.end_date -}} }\\
+\textit{ {{- job.company -}} }
+
+\begin{itemize}
+{% for bullet in job.bullets %}
+  \item {{ bullet }}
+{% endfor %}
+\end{itemize}
+{% endfor %}
+{% endif %}
+
+% ── Skills ───────────────────────────────────────────────────────────────────
+{% if skills.languages or skills.frameworks or skills.tools %}
+\section{Skills}
+{% if skills.languages %}
+\noindent\textbf{Languages:} {{ skills.languages | join(', ') }}\\
+{% endif %}
+{% if skills.frameworks %}
+\noindent\textbf{Frameworks:} {{ skills.frameworks | join(', ') }}\\
+{% endif %}
+{% if skills.tools %}
+\noindent\textbf{Tools:} {{ skills.tools | join(', ') }}
+{% endif %}
+{% endif %}
+
+% ── Education ────────────────────────────────────────────────────────────────
+{% if education %}
+\section{Education}
+{% for edu in education %}
+\noindent\textbf{ {{- edu.institution -}} } \hfill {{- edu.year -}} \\
+\textit{ {{- edu.degree -}} }
+{% if not loop.last %}\medskip{% endif %}
+{% endfor %}
+{% endif %}
+
+% ── Credentials ──────────────────────────────────────────────────────────────
+{% if credentials and credentials | length > 0 %}
+\section{Credentials \& Certifications}
+\begin{itemize}
+{% for c in credentials %}
+  \item {{ c }}
+{% endfor %}
+\end{itemize}
+{% endif %}
+
+\end{document}

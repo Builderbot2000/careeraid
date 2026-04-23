@@ -1,5 +1,9 @@
 import Database from 'better-sqlite3'
 import sql001 from './001_initial.sql?raw'
+import sql002 from './002_profile.sql?raw'
+import sql003 from './003_resume.sql?raw'
+import sql004 from './004_jobs.sql?raw'
+import sql005 from './005_safe_storage.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -7,6 +11,10 @@ interface MigrationRecord {
 
 const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '001_initial.sql', sql: sql001 },
+  { filename: '002_profile.sql', sql: sql002 },
+  { filename: '003_resume.sql', sql: sql003 },
+  { filename: '004_jobs.sql', sql: sql004 },
+  { filename: '005_safe_storage.sql', sql: sql005 },
 ]
 
 export function runMigrations(

@@ -9,10 +9,33 @@ import {
   getSettings,
   updateSetting,
   getApiKeyPresent,
+  getApiKey,
   saveApiKey,
   deleteApiKey,
 } from './settings'
 import type { FeatureLocks, Settings, SettingKey } from '../src/shared/ipc-types'
+import {
+  getAllEntries,
+  createEntry,
+  updateEntry,
+  deleteEntry,
+  getUserProfile,
+  setUserYoe,
+  exportToMarkdown,
+  importFromMarkdown,
+  countWords,
+} from '../core/profile/repository'
+import { CreateProfileEntrySchema, UpdateProfileEntrySchema } from '../core/profile/models'
+import { tailorResume } from '../core/resume/agent'
+import { renderTex } from '../core/resume/renderer'
+import { compileTex, recompileFromSnapshot } from '../core/resume/compiler'
+import { pdfPathToUrl } from '../core/resume/previewer'
+import type { Application } from '../src/shared/ipc-types'
+import { MockAdapter } from '../core/jobs/adapters/mock'
+import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
+import { getRankedPostings } from '../core/jobs/ranker'
+import { getTrackerPostings, updatePostingStatus } from '../core/tracker/repository'
+import type { PostingStatus } from '../core/tracker/models'
 
 const isDev = process.env.NODE_ENV === 'development'
 
@@ -109,7 +132,7 @@ async function runStartupValidation(): Promise<{
 
   // Feature lock: Claude API key
   try {
-    featureLocks.claudeApiKey = !(await getApiKeyPresent())
+    featureLocks.claudeApiKey = !getApiKeyPresent()
   } catch {
     featureLocks.claudeApiKey = true
   }
@@ -165,11 +188,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('settings:api-key-present', () => getApiKeyPresent())
 
-  ipcMain.handle('settings:set-api-key', async (_event, key: string) => {
+  ipcMain.handle('settings:set-api-key', (_event, key: string) => {
     if (typeof key !== 'string' || key.trim().length === 0) {
       throw new Error('API key must be a non-empty string')
     }
-    await saveApiKey(key.trim())
+    saveApiKey(key.trim())
   })
 
   ipcMain.handle('settings:delete-api-key', () => deleteApiKey())
@@ -182,6 +205,257 @@ function registerIpcHandlers(): void {
     }
     return shell.openExternal(url)
   })
+
+  // ─── Profile ─────────────────────────────────────────────────────────────
+
+  ipcMain.handle('profile:get-all', () => getAllEntries(getDb()))
+
+  ipcMain.handle('profile:create', (_event, input: unknown) => {
+    const parsed = CreateProfileEntrySchema.safeParse(input)
+    if (!parsed.success) throw new Error(parsed.error.message)
+    const settings = getSettings()
+    const wc = countWords(parsed.data.content)
+    if (wc > settings.profile_entry_word_limit) {
+      throw new Error(
+        `Content exceeds word limit of ${settings.profile_entry_word_limit} words (${wc} found)`,
+      )
+    }
+    return createEntry(getDb(), parsed.data)
+  })
+
+  ipcMain.handle(
+    'profile:update',
+    (_event, { id, updates }: { id: string; updates: unknown }) => {
+      const parsed = UpdateProfileEntrySchema.safeParse(updates)
+      if (!parsed.success) throw new Error(parsed.error.message)
+      if (parsed.data.content !== undefined) {
+        const settings = getSettings()
+        const wc = countWords(parsed.data.content)
+        if (wc > settings.profile_entry_word_limit) {
+          throw new Error(
+            `Content exceeds word limit of ${settings.profile_entry_word_limit} words (${wc} found)`,
+          )
+        }
+      }
+      return updateEntry(getDb(), id, parsed.data)
+    },
+  )
+
+  ipcMain.handle('profile:delete', (_event, id: string) => {
+    deleteEntry(getDb(), id)
+  })
+
+  ipcMain.handle('profile:get-user', () => getUserProfile(getDb()))
+
+  ipcMain.handle('profile:set-yoe', (_event, yoe: unknown) => {
+    const val = yoe === null ? null : typeof yoe === 'number' ? Math.floor(yoe) : null
+    setUserYoe(getDb(), val)
+  })
+
+  ipcMain.handle('profile:export', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: 'profile.md',
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (canceled || !filePath) return null
+    const markdown = exportToMarkdown(getDb())
+    fs.writeFileSync(filePath, markdown, 'utf-8')
+    logger.info('Profile exported', { filePath })
+    return filePath
+  })
+
+  ipcMain.handle('profile:import', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || !filePaths[0]) return null
+    const markdown = fs.readFileSync(filePaths[0], 'utf-8')
+    const result = importFromMarkdown(getDb(), markdown)
+    logger.info('Profile imported', result)
+    return result
+  })
+
+  // ─── Resume ───────────────────────────────────────────────────────────────
+
+  ipcMain.handle(
+    'resume:tailor',
+    async (
+      _event,
+      payload: unknown,
+    ) => {
+      const { jobDescription, templateName, postingId } = payload as {
+        jobDescription: string
+        templateName: string
+        postingId?: string
+      }
+      if (typeof jobDescription !== 'string' || !jobDescription.trim()) {
+        throw new Error('jobDescription must be a non-empty string')
+      }
+      if (typeof templateName !== 'string' || !templateName.trim()) {
+        throw new Error('templateName must be a non-empty string')
+      }
+
+      if (!getApiKeyPresent()) throw new Error('No API key stored — set one in Settings first')
+
+      const key = getApiKey()
+      if (!key) throw new Error('API key not retrievable')
+
+      const entries = getAllEntries(getDb())
+      if (entries.length === 0) throw new Error('Profile is empty — add entries first')
+
+      const resumeData = await tailorResume(
+        key,
+        entries,
+        jobDescription,
+        templateName,
+        postingId ?? null,
+      )
+
+      const applicationId = crypto.randomUUID()
+      const userData = app.getPath('userData')
+      const texDir = path.join(userData, 'resumes', applicationId)
+      const texPath = path.join(texDir, 'resume.tex')
+
+      renderTex(templateName, resumeData, texPath)
+
+      const settings = getSettings()
+      const xelatexBin =
+        settings.tex_binary_path ??
+        [
+          '/usr/bin/xelatex',
+          '/usr/local/bin/xelatex',
+          'C:\\texlive\\2024\\bin\\windows\\xelatex.exe',
+          'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe',
+        ].find((p) => fs.existsSync(p)) ??
+        'xelatex'
+
+      const outcome = await compileTex(texPath, xelatexBin)
+      if (!outcome.success) {
+        throw new Error(`xelatex compilation failed: ${outcome.errorLine}`)
+      }
+
+      const application: Application = {
+        id: applicationId,
+        posting_id: postingId ?? null,
+        tex_path: texPath,
+        resume_json: JSON.stringify(resumeData),
+        schema_version: 1,
+        applied_at: null,
+        notes: '',
+      }
+
+      getDb()
+        .prepare(
+          `INSERT INTO applications (id, posting_id, tex_path, resume_json, schema_version, applied_at, notes)
+           VALUES (@id, @posting_id, @tex_path, @resume_json, @schema_version, @applied_at, @notes)`,
+        )
+        .run(application)
+
+      logger.info('Resume tailored', { applicationId, templateName })
+      return { application, pdfUrl: pdfPathToUrl(outcome.pdfPath) }
+    },
+  )
+
+  ipcMain.handle('resume:get-applications', () => {
+    return getDb().prepare('SELECT * FROM applications ORDER BY rowid DESC').all()
+  })
+
+  ipcMain.handle('resume:get-templates', () => {
+    const templateDir = path.join(__dirname, '..', '..', 'templates', 'resume')
+    if (!fs.existsSync(templateDir)) return []
+    return fs
+      .readdirSync(templateDir)
+      .filter((f) => f.endsWith('.tex.njk'))
+      .map((f) => f.replace('.tex.njk', ''))
+  })
+
+  ipcMain.handle('resume:recompile', async (_event, applicationId: string) => {
+    const row = getDb()
+      .prepare('SELECT * FROM applications WHERE id = ?')
+      .get(applicationId) as Application | undefined
+
+    if (!row) throw new Error(`Application ${applicationId} not found`)
+
+    const settings = getSettings()
+    const xelatexBin =
+      settings.tex_binary_path ??
+      [
+        '/usr/bin/xelatex',
+        '/usr/local/bin/xelatex',
+        'C:\\texlive\\2024\\bin\\windows\\xelatex.exe',
+        'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe',
+      ].find((p) => fs.existsSync(p)) ??
+      'xelatex'
+
+    // Detect which template was used from stored tex path directory
+    const templateGuess = 'classic'
+
+    const outcome = await recompileFromSnapshot(
+      row.resume_json,
+      templateGuess,
+      row.tex_path,
+      xelatexBin,
+    )
+
+    if (!outcome.success) {
+      throw new Error(`Recompile failed: ${outcome.errorLine}`)
+    }
+
+    return pdfPathToUrl(outcome.pdfPath)
+  })
+
+  // ─── Search Config ────────────────────────────────────────────────────────
+
+  ipcMain.handle('search:get-config', () => {
+    return getDb().prepare('SELECT intent FROM search_config WHERE id = 1').get() ?? { intent: null }
+  })
+
+  ipcMain.handle('search:update-config', (_event, updates: { intent?: string | null }) => {
+    if (updates.intent !== undefined) {
+      getDb()
+        .prepare('UPDATE search_config SET intent = ? WHERE id = 1')
+        .run(updates.intent ?? null)
+    }
+  })
+
+  // ─── Jobs ─────────────────────────────────────────────────────────────────
+
+  ipcMain.handle('jobs:run-scrape', async () => {
+    const adapters = [new MockAdapter()]
+    return runScrape(getDb(), adapters)
+  })
+
+  ipcMain.handle('jobs:commit-scrape', () => {
+    commitScrape(getDb())
+    mainWindow?.webContents.send('jobs:scrape-committed')
+    logger.info('Scrape committed')
+  })
+
+  ipcMain.handle('jobs:discard-scrape', () => {
+    discardScrape()
+    logger.info('Scrape discarded')
+  })
+
+  ipcMain.handle('jobs:get-postings', () => {
+    return getRankedPostings(getDb())
+  })
+
+  ipcMain.handle('jobs:update-status', (_event, { id, status }: { id: string; status: string }) => {
+    updatePostingStatus(getDb(), id, status as PostingStatus)
+  })
+
+  // ─── Tracker ──────────────────────────────────────────────────────────────
+
+  ipcMain.handle('tracker:get-postings', () => {
+    return getTrackerPostings(getDb())
+  })
+}
+
+// On Linux without a Secret Service daemon (e.g. WSL, minimal desktops),
+// force safeStorage into "basic" mode so encryption is always available.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('password-store', 'basic')
 }
 
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
@@ -190,6 +464,13 @@ app.whenReady().then(async () => {
   // Logger needs userData path — initialize first
   initLogger('info')
   logger.info('App starting', { version: app.getVersion(), isDev })
+
+  if (process.platform === 'linux') {
+    logger.info(
+      'Linux detected — D-Bus errors from Chromium (dbus/bus.cc, dbus/object_proxy.cc) ' +
+      'are harmless noise from the notification/tray layer; they do not affect app function.',
+    )
+  }
 
   applyCSP()
   registerIpcHandlers()

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import type { FeatureLocks } from './shared/ipc-types'
+import type { FeatureLocks, JobPosting } from './shared/ipc-types'
 import Settings from './views/Settings'
 import Profile from './views/Profile'
 import SearchConfig from './views/SearchConfig'
@@ -35,6 +35,7 @@ export default function App(): React.ReactElement {
         playwrightChromium: false,
         profileEmpty: false,
     })
+    const [pendingNavPosting, setPendingNavPosting] = useState<JobPosting | null>(null)
 
     useEffect(() => {
         window.api.onFeatureLocks((locks) => setFeatureLocks(locks))
@@ -45,8 +46,10 @@ export default function App(): React.ReactElement {
         return item.lockedBy.some((k) => featureLocks[k])
     }
 
-    function navigate(id: View, item: NavItem): void {
-        if (isLocked(item)) return
+    function navigate(id: View, posting?: JobPosting): void {
+        const item = NAV.find((n) => n.id === id)
+        if (item && isLocked(item)) return
+        setPendingNavPosting(posting ?? null)
         setView(id)
     }
 
@@ -60,7 +63,7 @@ export default function App(): React.ReactElement {
                         <button
                             key={item.id}
                             className={`nav-btn${view === item.id ? ' active' : ''}${locked ? ' locked' : ''}`}
-                            onClick={() => navigate(item.id, item)}
+                            onClick={() => navigate(item.id)}
                             title={locked ? 'Feature locked — check Settings' : item.label}
                         >
                             {item.label}
@@ -73,8 +76,8 @@ export default function App(): React.ReactElement {
             <main className="content">
                 {view === 'profile' && <Profile />}
                 {view === 'search' && <SearchConfig />}
-                {view === 'jobs' && <JobBoard />}
-                {view === 'resume' && <ResumePreview />}
+                {view === 'jobs' && <JobBoard onNavigateToResume={(posting) => navigate('resume', posting)} />}
+                {view === 'resume' && <ResumePreview initialPosting={pendingNavPosting} />}
                 {view === 'tracker' && <Tracker />}
                 {view === 'analytics' && <Analytics />}
                 {view === 'settings' && <Settings featureLocks={featureLocks} />}

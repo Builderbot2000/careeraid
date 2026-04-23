@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "build:dist": "electron-vite build && electron-builder",
-    "postinstall": "electron-rebuild -f -w better-sqlite3 keytar",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
@@ -16,7 +16,6 @@
     "better-sqlite3": "^12.0.0",
     "cheerio": "^1.0.0",
     "electron-updater": "^6.8.0",
-    "keytar": "^7.9.0",
     "node-fetch": "^2.7.0",
     "nunjucks": "^3.2.4",
     "playwright": "^1.59.0",

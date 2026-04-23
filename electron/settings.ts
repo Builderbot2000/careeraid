@@ -1,23 +1,46 @@
-import keytar from 'keytar'
+import { safeStorage } from 'electron'
 import { getDb } from '../db/database'
 import type { Settings, SettingKey } from '../src/shared/ipc-types'
 
-const SERVICE = 'jobhunt'
-const ACCOUNT = 'anthropic_api_key'
+// ─── API key via safeStorage ──────────────────────────────────────────────────
+//
+// safeStorage encrypts with DPAPI (Windows), Keychain (macOS), or Secret
+// Service / fallback key (Linux). The encrypted Buffer is stored as base64 in
+// the settings table — no native addon, no D-Bus dependency.
 
-// ─── Keychain ────────────────────────────────────────────────────────────────
+export function saveApiKey(key: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('safeStorage encryption is not available on this system')
+  }
+  const encrypted = safeStorage.encryptString(key)
+  getDb()
+    .prepare('UPDATE settings SET encrypted_api_key = ? WHERE id = 1')
+    .run(encrypted.toString('base64'))
+}
 
-export const saveApiKey = (key: string): Promise<void> =>
-  keytar.setPassword(SERVICE, ACCOUNT, key)
+export function getApiKey(): string | null {
+  const row = getDb()
+    .prepare('SELECT encrypted_api_key FROM settings WHERE id = 1')
+    .get() as { encrypted_api_key: string | null }
+  if (!row?.encrypted_api_key) {
+    // Dev convenience: fall back to env var if no stored key
+    return process.env.ANTHROPIC_API_KEY ?? null
+  }
+  try {
+    return safeStorage.decryptString(Buffer.from(row.encrypted_api_key, 'base64'))
+  } catch {
+    return process.env.ANTHROPIC_API_KEY ?? null
+  }
+}
 
-export const getApiKey = (): Promise<string | null> =>
-  keytar.getPassword(SERVICE, ACCOUNT)
+export function deleteApiKey(): void {
+  getDb()
+    .prepare('UPDATE settings SET encrypted_api_key = NULL WHERE id = 1')
+    .run()
+}
 
-export const deleteApiKey = (): Promise<boolean> =>
-  keytar.deletePassword(SERVICE, ACCOUNT)
-
-export async function getApiKeyPresent(): Promise<boolean> {
-  const key = await keytar.getPassword(SERVICE, ACCOUNT)
+export function getApiKeyPresent(): boolean {
+  const key = getApiKey()
   return key !== null && key.length > 0
 }
 
