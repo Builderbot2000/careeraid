@@ -8,6 +8,8 @@ import type {
   UpdateProfileEntryInput,
   PostingStatus,
   SearchConfigRow,
+  SearchTerm,
+  BanListEntry,
 } from '../src/shared/ipc-types'
 
 contextBridge.exposeInMainWorld('api', {
@@ -38,7 +40,6 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // ── Shell ──────────────────────────────────────────────────────────────────
-  /** Opens a URL in the default browser. Only https:// URLs are allowed. */
   openExternal(url: string): Promise<void> {
     return ipcRenderer.invoke('shell:open-external', url)
   },
@@ -102,6 +103,48 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('search:update-config', updates)
   },
 
+  // ── Search Terms ───────────────────────────────────────────────────────────
+  getSearchTerms(): Promise<SearchTerm[]> {
+    return ipcRenderer.invoke('search-terms:get')
+  },
+
+  generateSearchTerms(): Promise<SearchTerm[]> {
+    return ipcRenderer.invoke('search-terms:generate')
+  },
+
+  updateSearchTerm(id: string, updates: { term?: string; enabled?: boolean }): Promise<void> {
+    return ipcRenderer.invoke('search-terms:update', { id, updates })
+  },
+
+  addSearchTerm(adapterId: string, term: string): Promise<SearchTerm> {
+    return ipcRenderer.invoke('search-terms:add', { adapterId, term })
+  },
+
+  deleteSearchTerm(id: string): Promise<void> {
+    return ipcRenderer.invoke('search-terms:delete', id)
+  },
+
+  // ── Ban List ───────────────────────────────────────────────────────────────
+  getBanList(): Promise<BanListEntry[]> {
+    return ipcRenderer.invoke('ban-list:get')
+  },
+
+  addBanEntry(entry: {
+    type: 'company' | 'domain'
+    value: string
+    reason?: string
+  }): Promise<{ entry: BanListEntry; deletedCount: number }> {
+    return ipcRenderer.invoke('ban-list:add', entry)
+  },
+
+  removeBanEntry(id: string): Promise<void> {
+    return ipcRenderer.invoke('ban-list:remove', id)
+  },
+
+  previewBanMatch(type: 'company' | 'domain', value: string): Promise<number> {
+    return ipcRenderer.invoke('ban-list:preview', { type, value })
+  },
+
   // ── Jobs ───────────────────────────────────────────────────────────────────
   runScrape() {
     return ipcRenderer.invoke('jobs:run-scrape')
@@ -126,6 +169,44 @@ contextBridge.exposeInMainWorld('api', {
   // ── Tracker ────────────────────────────────────────────────────────────────
   getTrackerPostings() {
     return ipcRenderer.invoke('tracker:get-postings')
+  },
+
+  // ── Analytics ──────────────────────────────────────────────────────────────
+  getAnalyticsFunnel() {
+    return ipcRenderer.invoke('analytics:funnel')
+  },
+
+  getAnalyticsBySource() {
+    return ipcRenderer.invoke('analytics:by-source')
+  },
+
+  getAnalyticsBySeniority() {
+    return ipcRenderer.invoke('analytics:by-seniority')
+  },
+
+  getAnalyticsWeekly() {
+    return ipcRenderer.invoke('analytics:weekly')
+  },
+
+  getAnalyticsLLMCost() {
+    return ipcRenderer.invoke('analytics:llm-cost')
+  },
+
+  getAnalyticsLLMCostByType() {
+    return ipcRenderer.invoke('analytics:llm-cost-by-type')
+  },
+
+  // ── Backup / Export / Import ───────────────────────────────────────────────
+  createBackup(): Promise<string | null> {
+    return ipcRenderer.invoke('backup:create')
+  },
+
+  exportData(): Promise<string | null> {
+    return ipcRenderer.invoke('data:export')
+  },
+
+  importData(mode: 'merge' | 'replace'): Promise<{ imported: number } | null> {
+    return ipcRenderer.invoke('data:import', mode)
   },
 
   // ── Events ─────────────────────────────────────────────────────────────────

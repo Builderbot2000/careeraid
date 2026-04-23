@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
+import Database from 'better-sqlite3'
 import type { ProfileEntry } from '../../src/shared/ipc-types'
 import { ResumeDataSchema, type ResumeData } from './validator'
+import { writeLLMUsage } from '../jobs/llmUsage'
 
 // Token cost table (USD per 1M tokens) — stub; wired to llm_usage in Phase 8
 const PRICE_TABLE: Record<string, { input: number; output: number }> = {
@@ -84,22 +86,13 @@ Rules:
 
 // ─── LLM call ────────────────────────────────────────────────────────────────
 
-/** Stub: replaced with real write in Phase 8 */
-function recordLlmUsageStub(
-  _model: string,
-  _inputTokens: number,
-  _outputTokens: number,
-  _postingId: string | null,
-): void {
-  // no-op until llm_usage table is created in Phase 6
-}
-
 export async function tailorResume(
   apiKey: string,
   entries: ProfileEntry[],
   jobDescription: string,
   templateName: string,
   postingId: string | null = null,
+  db: Database.Database | null = null,
 ): Promise<ResumeData> {
   const client = new Anthropic({ apiKey })
   const prompt = buildPrompt(entries, jobDescription, templateName)
@@ -133,7 +126,19 @@ export async function tailorResume(
     const _cost =
       (inputTokens * priceEntry.input + outputTokens * priceEntry.output) / 1_000_000
 
-    recordLlmUsageStub(model, inputTokens, outputTokens, postingId)
+    if (db) {
+      try {
+        writeLLMUsage(db, {
+          call_type: 'resume_tailoring',
+          model,
+          input_tokens: inputTokens,
+          output_tokens: outputTokens,
+          posting_id: postingId,
+        })
+      } catch {
+        // non-fatal — don't abort tailoring if logging fails
+      }
+    }
 
     const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
 

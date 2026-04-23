@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, session } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { randomUUID } from 'crypto'
 import { initLogger, logger, setLogLevel, type LogLevel } from './logger'
 import { initConnectionManager, closeDb } from './connection-manager'
 import { getDb } from '../db/database'
@@ -13,7 +14,7 @@ import {
   saveApiKey,
   deleteApiKey,
 } from './settings'
-import type { FeatureLocks, Settings, SettingKey } from '../src/shared/ipc-types'
+import type { FeatureLocks, Settings, SettingKey, BanListEntry, SearchTerm } from '../src/shared/ipc-types'
 import {
   getAllEntries,
   createEntry,
@@ -34,7 +35,17 @@ import type { Application } from '../src/shared/ipc-types'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
 import { getRankedPostings } from '../core/jobs/ranker'
+import { generateSearchTerms } from '../core/jobs/searchTermGen'
+import { writeLLMUsage } from '../core/jobs/llmUsage'
 import { getTrackerPostings, updatePostingStatus } from '../core/tracker/repository'
+import {
+  getFunnelSummary,
+  getBySource,
+  getBySeniority,
+  getWeeklyTimeSeries,
+  getLLMCostSummary,
+  getLLMCostByType,
+} from '../core/tracker/analytics'
 import type { PostingStatus } from '../core/tracker/models'
 
 const isDev = process.env.NODE_ENV === 'development'
@@ -112,6 +123,21 @@ async function runStartupValidation(): Promise<{
     runMigrations(getDb(), (msg) => logger.info(msg))
   } catch (e) {
     return { hardBlock: true, reason: `Cannot open database: ${e}` }
+  }
+
+  // Retention policy: clear raw_text from stale non-favorited postings
+  try {
+    const settings = getSettings()
+    const retentionDays = settings.posting_retention_days ?? 60
+    getDb()
+      .prepare(
+        `UPDATE job_postings SET raw_text = NULL
+         WHERE status NOT IN ('favorited')
+           AND last_seen_at < date('now', '-' || ? || ' days')`,
+      )
+      .run(retentionDays)
+  } catch (e) {
+    logger.warn('Retention policy failed (non-fatal)', { error: String(e) })
   }
 
   // Apply persisted log level now that settings are readable
@@ -310,6 +336,7 @@ function registerIpcHandlers(): void {
         jobDescription,
         templateName,
         postingId ?? null,
+        getDb(),
       )
 
       const applicationId = crypto.randomUUID()
@@ -408,15 +435,185 @@ function registerIpcHandlers(): void {
   // ─── Search Config ────────────────────────────────────────────────────────
 
   ipcMain.handle('search:get-config', () => {
-    return getDb().prepare('SELECT intent FROM search_config WHERE id = 1').get() ?? { intent: null }
+    return (
+      getDb()
+        .prepare('SELECT * FROM search_config WHERE id = 1')
+        .get() ?? {
+        intent: null,
+        term_generation_hash: null,
+        ranking_weights: '{}',
+        affinity_skip_threshold: 15,
+        excluded_stack: '[]',
+        required_keywords: '[]',
+        excluded_keywords: '[]',
+        keyword_match_fields: '["title","tech_stack"]',
+      }
+    )
   })
 
-  ipcMain.handle('search:update-config', (_event, updates: { intent?: string | null }) => {
-    if (updates.intent !== undefined) {
-      getDb()
-        .prepare('UPDATE search_config SET intent = ? WHERE id = 1')
-        .run(updates.intent ?? null)
+  ipcMain.handle('search:update-config', (_event, updates: Record<string, unknown>) => {
+    const allowed = new Set([
+      'intent',
+      'ranking_weights',
+      'affinity_skip_threshold',
+      'excluded_stack',
+      'required_keywords',
+      'excluded_keywords',
+      'keyword_match_fields',
+      'term_generation_hash',
+    ])
+    const db = getDb()
+    for (const [key, value] of Object.entries(updates)) {
+      if (!allowed.has(key)) continue
+      db.prepare(`UPDATE search_config SET "${key}" = ? WHERE id = 1`).run(
+        value === null || value === undefined ? null : typeof value === 'string' ? value : String(value),
+      )
     }
+  })
+
+  // ─── Search Terms ─────────────────────────────────────────────────────────
+
+  ipcMain.handle('search-terms:get', () => {
+    const rows = getDb()
+      .prepare('SELECT * FROM search_terms ORDER BY adapter_id, created_at')
+      .all() as Array<Omit<SearchTerm, 'enabled'> & { enabled: number }>
+    return rows.map((r) => ({ ...r, enabled: r.enabled === 1 }))
+  })
+
+  ipcMain.handle('search-terms:generate', async () => {
+    const key = getApiKey()
+    if (!key) throw new Error('No API key stored — set one in Settings first')
+    const config = getDb()
+      .prepare('SELECT intent FROM search_config WHERE id = 1')
+      .get() as { intent: string | null } | undefined
+    const intent = config?.intent ?? ''
+    if (!intent.trim()) throw new Error('Set a search intent before generating terms')
+    return generateSearchTerms(getDb(), key, intent)
+  })
+
+  ipcMain.handle(
+    'search-terms:update',
+    (_event, { id, updates }: { id: string; updates: { term?: string; enabled?: boolean } }) => {
+      if (typeof id !== 'string' || !id) throw new Error('Invalid id')
+      const db = getDb()
+      if (updates.term !== undefined) {
+        db.prepare('UPDATE search_terms SET term = ? WHERE id = ?').run(updates.term, id)
+      }
+      if (updates.enabled !== undefined) {
+        db.prepare('UPDATE search_terms SET enabled = ? WHERE id = ?').run(
+          updates.enabled ? 1 : 0,
+          id,
+        )
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'search-terms:add',
+    (_event, { adapterId, term }: { adapterId: string; term: string }) => {
+      if (!term.trim()) throw new Error('Term cannot be empty')
+      const id = randomUUID()
+      const now = new Date().toISOString()
+      getDb()
+        .prepare(
+          `INSERT INTO search_terms (id, adapter_id, term, enabled, source, created_at)
+           VALUES (?, ?, ?, 1, 'user_added', ?)`,
+        )
+        .run(id, adapterId, term.trim(), now)
+      const newTerm: SearchTerm = {
+        id,
+        adapter_id: adapterId,
+        term: term.trim(),
+        enabled: true,
+        source: 'user_added',
+        created_at: now,
+      }
+      return newTerm
+    },
+  )
+
+  ipcMain.handle('search-terms:delete', (_event, id: string) => {
+    getDb().prepare('DELETE FROM search_terms WHERE id = ?').run(id)
+  })
+
+  // ─── Ban List ─────────────────────────────────────────────────────────────
+
+  ipcMain.handle('ban-list:get', () => {
+    return getDb().prepare('SELECT * FROM ban_list ORDER BY type, value').all()
+  })
+
+  ipcMain.handle(
+    'ban-list:preview',
+    (_event, { type, value }: { type: 'company' | 'domain'; value: string }) => {
+      const db = getDb()
+      if (type === 'domain') {
+        const row = db
+          .prepare('SELECT COUNT(*) AS count FROM job_postings WHERE resolved_domain = ?')
+          .get(value) as { count: number }
+        return row.count
+      }
+      // Company — test regex against all company names
+      const companies = db
+        .prepare('SELECT DISTINCT company FROM job_postings')
+        .all() as { company: string }[]
+      let pattern: RegExp
+      try {
+        pattern = new RegExp(value, 'i')
+      } catch {
+        pattern = new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+      }
+      return companies.filter((r) => pattern.test(r.company)).length
+    },
+  )
+
+  ipcMain.handle(
+    'ban-list:add',
+    (
+      _event,
+      { type, value, reason }: { type: 'company' | 'domain'; value: string; reason?: string },
+    ) => {
+      if (!value.trim()) throw new Error('Value cannot be empty')
+      const db = getDb()
+      const id = randomUUID()
+      const now = new Date().toISOString()
+      db.prepare(
+        'INSERT INTO ban_list (id, type, value, reason, created_at) VALUES (?, ?, ?, ?, ?)',
+      ).run(id, type, value.trim(), reason ?? null, now)
+
+      // Hard-delete matching postings
+      let deletedCount = 0
+      if (type === 'domain') {
+        const result = db
+          .prepare('DELETE FROM job_postings WHERE resolved_domain = ?')
+          .run(value.trim())
+        deletedCount = result.changes
+      } else {
+        const all = db.prepare('SELECT id, company FROM job_postings').all() as {
+          id: string
+          company: string
+        }[]
+        let pattern: RegExp
+        try {
+          pattern = new RegExp(value.trim(), 'i')
+        } catch {
+          pattern = new RegExp(value.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+        }
+        const toDelete = all.filter((r) => pattern.test(r.company)).map((r) => r.id)
+        if (toDelete.length > 0) {
+          const placeholders = toDelete.map(() => '?').join(',')
+          db.prepare(`DELETE FROM job_postings WHERE id IN (${placeholders})`).run(toDelete)
+          deletedCount = toDelete.length
+        }
+      }
+
+      const entry: BanListEntry = { id, type, value: value.trim(), reason: reason ?? null, created_at: now }
+      logger.info('Ban entry added', { type, value, deletedCount })
+      return { entry, deletedCount }
+    },
+  )
+
+  ipcMain.handle('ban-list:remove', (_event, id: string) => {
+    getDb().prepare('DELETE FROM ban_list WHERE id = ?').run(id)
   })
 
   // ─── Jobs ─────────────────────────────────────────────────────────────────
@@ -438,7 +635,8 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('jobs:get-postings', () => {
-    return getRankedPostings(getDb())
+    const key = getApiKeyPresent() ? getApiKey() : null
+    return getRankedPostings(getDb(), key)
   })
 
   ipcMain.handle('jobs:update-status', (_event, { id, status }: { id: string; status: string }) => {
@@ -449,6 +647,127 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('tracker:get-postings', () => {
     return getTrackerPostings(getDb())
+  })
+
+  // ─── Analytics ────────────────────────────────────────────────────────────
+
+  ipcMain.handle('analytics:funnel', () => getFunnelSummary(getDb()))
+  ipcMain.handle('analytics:by-source', () => getBySource(getDb()))
+  ipcMain.handle('analytics:by-seniority', () => getBySeniority(getDb()))
+  ipcMain.handle('analytics:weekly', () => getWeeklyTimeSeries(getDb()))
+  ipcMain.handle('analytics:llm-cost', () => getLLMCostSummary(getDb()))
+  ipcMain.handle('analytics:llm-cost-by-type', () => getLLMCostByType(getDb()))
+
+  // ─── Backup ───────────────────────────────────────────────────────────────
+
+  ipcMain.handle('backup:create', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `careeraid-backup-${new Date().toISOString().slice(0, 10)}.db`,
+      filters: [{ name: 'SQLite Database', extensions: ['db'] }],
+    })
+    if (canceled || !filePath) return null
+    const dbPath = path.join(app.getPath('userData'), 'jobhunt.db')
+    fs.copyFileSync(dbPath, filePath)
+    logger.info('Backup created', { filePath })
+    return filePath
+  })
+
+  // ─── Data Export ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('data:export', async () => {
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      defaultPath: `careeraid-export-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+    })
+    if (canceled || !filePath) return null
+
+    const db = getDb()
+    const payload = {
+      version: 1,
+      exported_at: new Date().toISOString(),
+      profile_entries: db.prepare('SELECT * FROM profile_entries').all(),
+      search_config: db.prepare('SELECT * FROM search_config WHERE id = 1').get(),
+      search_terms: db.prepare('SELECT * FROM search_terms').all(),
+      ban_list: db.prepare('SELECT * FROM ban_list').all(),
+    }
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8')
+    logger.info('Data exported', { filePath })
+    return filePath
+  })
+
+  // ─── Data Import ──────────────────────────────────────────────────────────
+
+  ipcMain.handle('data:import', async (_event, mode: 'merge' | 'replace') => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || !filePaths[0]) return null
+
+    const raw = fs.readFileSync(filePaths[0], 'utf-8')
+    let payload: Record<string, unknown>
+    try {
+      payload = JSON.parse(raw)
+    } catch {
+      throw new Error('Invalid JSON file')
+    }
+
+    const db = getDb()
+    let imported = 0
+
+    db.transaction(() => {
+      if (mode === 'replace') {
+        db.prepare('DELETE FROM profile_entries').run()
+        db.prepare('DELETE FROM search_terms').run()
+        db.prepare('DELETE FROM ban_list').run()
+      }
+
+      // Profile entries
+      if (Array.isArray(payload.profile_entries)) {
+        const stmt = db.prepare(
+          `INSERT OR IGNORE INTO profile_entries (id, type, title, content, tags, start_date, end_date, created_at)
+           VALUES (@id, @type, @title, @content, @tags, @start_date, @end_date, @created_at)`,
+        )
+        for (const e of payload.profile_entries as Record<string, unknown>[]) {
+          if (e.id && e.type && e.title && e.content) {
+            stmt.run(e)
+            imported++
+          }
+        }
+      }
+
+      // Search terms
+      if (Array.isArray(payload.search_terms)) {
+        const stmt = db.prepare(
+          `INSERT OR IGNORE INTO search_terms (id, adapter_id, term, enabled, source, created_at)
+           VALUES (@id, @adapter_id, @term, @enabled, @source, @created_at)`,
+        )
+        for (const t of payload.search_terms as Record<string, unknown>[]) {
+          if (t.id && t.adapter_id && t.term) {
+            stmt.run(t)
+            imported++
+          }
+        }
+      }
+
+      // Ban list
+      if (Array.isArray(payload.ban_list)) {
+        const stmt = db.prepare(
+          `INSERT OR IGNORE INTO ban_list (id, type, value, reason, created_at)
+           VALUES (@id, @type, @value, @reason, @created_at)`,
+        )
+        for (const b of payload.ban_list as Record<string, unknown>[]) {
+          if (b.id && b.type && b.value) {
+            stmt.run(b)
+            imported++
+          }
+        }
+      }
+    })()
+
+    logger.info('Data imported', { mode, imported })
+    return { imported }
   })
 }
 

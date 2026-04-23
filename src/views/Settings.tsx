@@ -22,6 +22,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
     const [apiKeyPresent, setApiKeyPresent] = useState(false)
     const [saving, setSaving] = useState(false)
     const [msg, setMsg] = useState('')
+    const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
 
     useEffect(() => {
         window.api.getSettings().then(setSettings)
@@ -184,6 +185,50 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         onChange={(e) => saveSetting('affinity_token_budget', Number(e.target.value))}
                     />
                     <div className="form-hint">Max input tokens per affinity scoring batch (default 80,000).</div>
+                </div>
+            </div>
+
+            {/* Backup & Export */}
+            <div className="card">
+                <h2>Backup &amp; Export</h2>
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                    <button
+                        className="btn"
+                        onClick={async () => {
+                            const path = await window.api.createBackup()
+                            if (path) setMsg(`Backup saved to ${path}`)
+                        }}
+                    >
+                        Create Backup (.db)
+                    </button>
+                    <button
+                        className="btn"
+                        onClick={async () => {
+                            const path = await window.api.exportData()
+                            if (path) setMsg(`Data exported to ${path}`)
+                        }}
+                    >
+                        Export Data (.json)
+                    </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <select
+                        value={importMode}
+                        onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
+                        style={{ padding: '6px 8px', borderRadius: '4px', border: '1px solid #d1d5db', fontSize: '0.875rem', fontFamily: 'inherit' }}
+                    >
+                        <option value="merge">Merge (keep existing, add new)</option>
+                        <option value="replace">Replace (clear first)</option>
+                    </select>
+                    <button
+                        className="btn btn-danger"
+                        onClick={async () => {
+                            const result = await window.api.importData(importMode)
+                            if (result) setMsg(`Imported ${result.imported} records (${importMode} mode)`)
+                        }}
+                    >
+                        Import from JSON…
+                    </button>
                 </div>
             </div>
 

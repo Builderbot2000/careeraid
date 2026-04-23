@@ -112,12 +112,96 @@ export interface JobPosting {
 
 export interface SearchConfigRow {
   intent: string | null
+  term_generation_hash: string | null
+  ranking_weights: string        // JSON: Record<string, number>
+  affinity_skip_threshold: number
+  excluded_stack: string         // JSON: string[]
+  required_keywords: string      // JSON: string[]
+  excluded_keywords: string      // JSON: string[]
+  keyword_match_fields: string   // JSON: string[]
 }
 
 export interface ScrapeSummary {
   fetched: number
   dupes: number
   netNew: number
+  ban_excluded: number
+  keyword_filtered: number
+}
+
+// ─── Search terms ─────────────────────────────────────────────────────────────
+
+export interface SearchTerm {
+  id: string
+  adapter_id: string
+  term: string
+  enabled: boolean
+  source: 'llm_generated' | 'user_added'
+  created_at: string
+}
+
+// ─── Ban list ─────────────────────────────────────────────────────────────────
+
+export interface BanListEntry {
+  id: string
+  type: 'company' | 'domain'
+  value: string
+  reason: string | null
+  created_at: string
+}
+
+// ─── LLM usage ────────────────────────────────────────────────────────────────
+
+export interface LLMUsageRecord {
+  id: string
+  call_type: 'search_term_gen' | 'affinity_scoring' | 'resume_tailoring'
+  model: string
+  input_tokens: number
+  output_tokens: number
+  estimated_cost: number
+  called_at: string
+  posting_id: string | null
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+
+export interface FunnelSummary {
+  applied: number
+  interviewing: number
+  offer: number
+  rejected: number
+  ghosted: number
+  response_rate: number   // (interviewing + offer + rejected) / applied; NaN if 0 applied
+  conversion_rate: number // offer / applied
+}
+
+export interface SourceMetric {
+  source: string
+  count: number
+  response_rate: number
+  avg_days_to_response: number | null
+}
+
+export interface SeniorityMetric {
+  seniority: string
+  count: number
+  response_rate: number
+}
+
+export interface WeeklyMetric {
+  week: string  // ISO week label "YYYY-Www"
+  applications: number
+}
+
+export interface LLMCostSummary {
+  all_time: number
+  current_month: number
+}
+
+export interface LLMCostByType {
+  call_type: string
+  total_cost: number
+  call_count: number
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
@@ -183,6 +267,19 @@ export interface ElectronAPI {
   getSearchConfig(): Promise<SearchConfigRow>
   updateSearchConfig(updates: Partial<SearchConfigRow>): Promise<void>
 
+  // Search terms
+  getSearchTerms(): Promise<SearchTerm[]>
+  generateSearchTerms(): Promise<SearchTerm[]>
+  updateSearchTerm(id: string, updates: { term?: string; enabled?: boolean }): Promise<void>
+  addSearchTerm(adapterId: string, term: string): Promise<SearchTerm>
+  deleteSearchTerm(id: string): Promise<void>
+
+  // Ban list
+  getBanList(): Promise<BanListEntry[]>
+  addBanEntry(entry: { type: 'company' | 'domain'; value: string; reason?: string }): Promise<{ entry: BanListEntry; deletedCount: number }>
+  removeBanEntry(id: string): Promise<void>
+  previewBanMatch(type: 'company' | 'domain', value: string): Promise<number>
+
   // Jobs
   runScrape(): Promise<ScrapeSummary>
   commitScrape(): Promise<void>
@@ -192,6 +289,19 @@ export interface ElectronAPI {
 
   // Tracker
   getTrackerPostings(): Promise<JobPosting[]>
+
+  // Analytics
+  getAnalyticsFunnel(): Promise<FunnelSummary>
+  getAnalyticsBySource(): Promise<SourceMetric[]>
+  getAnalyticsBySeniority(): Promise<SeniorityMetric[]>
+  getAnalyticsWeekly(): Promise<WeeklyMetric[]>
+  getAnalyticsLLMCost(): Promise<LLMCostSummary>
+  getAnalyticsLLMCostByType(): Promise<LLMCostByType[]>
+
+  // Backup + Data export/import
+  createBackup(): Promise<string | null>
+  exportData(): Promise<string | null>
+  importData(mode: 'merge' | 'replace'): Promise<{ imported: number } | null>
 
   // Events
   onScrapingCommitted(cb: () => void): void

@@ -2,12 +2,7 @@ import Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
 import type { JobPosting } from './adapters/base'
 import type { BaseAdapter } from './adapters/base'
-
-export interface ScrapeSummary {
-  fetched: number
-  dupes: number
-  netNew: number
-}
+import type { ScrapeSummary } from '../../src/shared/ipc-types'
 
 // In-memory staging buffer — held between runScrape and commitScrape/discardScrape.
 // Safe because all IPC calls execute synchronously on the main process.
@@ -16,6 +11,118 @@ let staged: JobPosting[] | null = null
 function compositeKey(company: string, title: string, posted_at: string | null): string {
   return `${company.toLowerCase()}::${title.toLowerCase().replace(/\s+/g, ' ').trim()}::${posted_at ?? ''}`
 }
+
+// ─── Pre-commit filters ───────────────────────────────────────────────────────
+
+function matchesCompanyBan(company: string, pattern: string): boolean {
+  try {
+    return new RegExp(pattern, 'i').test(company)
+  } catch {
+    return company.toLowerCase().includes(pattern.toLowerCase())
+  }
+}
+
+function applyBanList(
+  db: Database.Database,
+  postings: JobPosting[],
+): { filtered: JobPosting[]; excluded: number } {
+  const bans = db.prepare('SELECT type, value FROM ban_list').all() as {
+    type: 'company' | 'domain'
+    value: string
+  }[]
+  if (bans.length === 0) return { filtered: postings, excluded: 0 }
+
+  const companyBans = bans.filter((b) => b.type === 'company').map((b) => b.value)
+  const domainBans = new Set(bans.filter((b) => b.type === 'domain').map((b) => b.value))
+
+  const filtered: JobPosting[] = []
+  let excluded = 0
+
+  for (const p of postings) {
+    const banned =
+      companyBans.some((pat) => matchesCompanyBan(p.company, pat)) ||
+      (p.resolved_domain !== null && domainBans.has(p.resolved_domain))
+    if (banned) {
+      excluded++
+    } else {
+      filtered.push(p)
+    }
+  }
+
+  return { filtered, excluded }
+}
+
+function parseJsonArray(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  try {
+    const v = JSON.parse(raw)
+    return Array.isArray(v) ? v.map(String) : []
+  } catch {
+    return []
+  }
+}
+
+function applyKeywordFilters(
+  db: Database.Database,
+  postings: JobPosting[],
+): { filtered: JobPosting[]; excluded: number } {
+  const configRow = db
+    .prepare(
+      'SELECT required_keywords, excluded_keywords, keyword_match_fields FROM search_config WHERE id = 1',
+    )
+    .get() as
+    | { required_keywords: string; excluded_keywords: string; keyword_match_fields: string }
+    | undefined
+
+  const required = parseJsonArray(configRow?.required_keywords)
+  const excluded = parseJsonArray(configRow?.excluded_keywords)
+  const matchFields = parseJsonArray(configRow?.keyword_match_fields).length
+    ? parseJsonArray(configRow?.keyword_match_fields)
+    : ['title', 'tech_stack']
+
+  if (required.length === 0 && excluded.length === 0) {
+    return { filtered: postings, excluded: 0 }
+  }
+
+  const result: JobPosting[] = []
+  let excludedCount = 0
+
+  for (const p of postings) {
+    const parts: string[] = []
+    if (matchFields.includes('title')) parts.push(p.title)
+    if (matchFields.includes('tech_stack')) parts.push(...p.tech_stack)
+    if (matchFields.includes('raw_text') && p.raw_text) parts.push(p.raw_text)
+    const haystack = parts.join(' ').toLowerCase()
+
+    let keep = true
+
+    for (const kw of excluded) {
+      const pattern = kw.startsWith('re:') ? new RegExp(kw.slice(3), 'i') : kw.toLowerCase()
+      if (typeof pattern === 'string' ? haystack.includes(pattern) : pattern.test(haystack)) {
+        keep = false
+        break
+      }
+    }
+
+    if (keep && required.length > 0) {
+      const ok = required.some((kw) => {
+        const pattern = kw.startsWith('re:') ? new RegExp(kw.slice(3), 'i') : kw.toLowerCase()
+        return typeof pattern === 'string' ? haystack.includes(pattern) : pattern.test(haystack)
+      })
+      if (!ok) keep = false
+    }
+
+    if (keep) {
+      result.push(p)
+    } else {
+      excludedCount++
+    }
+  }
+
+  return { filtered: result, excluded: excludedCount }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function runScrape(
   db: Database.Database,
@@ -68,9 +175,13 @@ export async function runScrape(
     }
   }
 
-  staged = results
+  // PRE_COMMIT_FILTER: ban list → keyword filter
+  const { filtered: afterBan, excluded: ban_excluded } = applyBanList(db, results)
+  const { filtered: afterKeyword, excluded: keyword_filtered } = applyKeywordFilters(db, afterBan)
 
-  return { fetched, dupes, netNew: results.length }
+  staged = afterKeyword
+
+  return { fetched, dupes, netNew: afterKeyword.length, ban_excluded, keyword_filtered }
 }
 
 export function commitScrape(db: Database.Database): void {
