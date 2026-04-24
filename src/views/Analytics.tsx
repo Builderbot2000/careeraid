@@ -117,7 +117,7 @@ export default function Analytics(): React.ReactElement {
             <h2 style={{ marginTop: 0 }}>Analytics</h2>
 
             {funnel && (
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <div data-testid="analytics-funnel" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <StatCard label="Applied" value={funnel.applied} />
                     <StatCard label="Interviewing" value={funnel.interviewing} />
                     <StatCard label="Offers" value={funnel.offer} />
@@ -131,7 +131,7 @@ export default function Analytics(): React.ReactElement {
             {weekly.length === 0 ? (
                 <p style={{ fontSize: '0.85rem', color: '#6b7280' }}>No weekly data yet.</p>
             ) : (
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer data-testid="analytics-weekly-chart" width="100%" height={220}>
                     <BarChart data={weekly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="week" tick={{ fontSize: 11 }} />

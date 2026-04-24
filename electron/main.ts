@@ -33,6 +33,7 @@ import { compileTex, recompileFromSnapshot } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
 import type { Application } from '../src/shared/ipc-types'
 import { MockAdapter } from '../core/jobs/adapters/mock'
+import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
 import { getRankedPostings } from '../core/jobs/ranker'
 import { generateSearchTerms } from '../core/jobs/searchTermGen'
@@ -619,7 +620,11 @@ function registerIpcHandlers(): void {
   // ─── Jobs ─────────────────────────────────────────────────────────────────
 
   ipcMain.handle('jobs:run-scrape', async () => {
-    const adapters = [new MockAdapter()]
+    const adapters: InstanceType<typeof MockAdapter | typeof LinkedInAdapter>[] = [new MockAdapter()]
+    const playwrightDir = path.join(app.getPath('userData'), 'ms-playwright')
+    if (fs.existsSync(playwrightDir)) {
+      adapters.push(new LinkedInAdapter())
+    }
     return runScrape(getDb(), adapters)
   })
 
@@ -780,6 +785,11 @@ if (process.platform === 'linux') {
 // ─── App Lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // In test mode, redirect userData to the directory provided by the test runner.
+  if (process.env.CAREERAID_TEST === '1' && process.env.ELECTRON_USER_DATA) {
+    app.setPath('userData', process.env.ELECTRON_USER_DATA)
+  }
+
   // Logger needs userData path — initialize first
   initLogger('info')
   logger.info('App starting', { version: app.getVersion(), isDev })
@@ -793,6 +803,12 @@ app.whenReady().then(async () => {
 
   applyCSP()
   registerIpcHandlers()
+
+  // In test mode, override Claude-dependent IPC handlers with deterministic stubs.
+  if (process.env.CAREERAID_TEST === '1') {
+    const { registerTestStubs } = await import('../tests/stubs-main')
+    registerTestStubs()
+  }
 
   const result = await runStartupValidation()
 

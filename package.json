@@ -9,7 +9,10 @@
     "preview": "electron-vite preview",
     "build:dist": "electron-vite build && electron-builder",
     "postinstall": "electron-rebuild -f -w better-sqlite3",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json"
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test:e2e": "npm run build && playwright test --config tests/playwright.config.ts",
+    "test:e2e:headed": "npm run build && playwright test --config tests/playwright.config.ts --headed",
+    "render:sdlc": "node docs/render-diagram.js docs/AISDLC_diagram.md"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -24,6 +27,7 @@
   },
   "devDependencies": {
     "@electron/rebuild": "^4.0.0",
+    "@playwright/test": "^1.59.1",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.0.0",
     "@types/node-fetch": "^2.6.11",

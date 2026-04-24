@@ -62,6 +62,7 @@ export default function App(): React.ReactElement {
                     return (
                         <button
                             key={item.id}
+                            data-testid={`nav-${item.id}`}
                             className={`nav-btn${view === item.id ? ' active' : ''}${locked ? ' locked' : ''}`}
                             onClick={() => navigate(item.id)}
                             title={locked ? 'Feature locked — check Settings' : item.label}

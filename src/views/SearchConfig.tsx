@@ -107,6 +107,7 @@ function IntentTab(): React.ReactElement {
                     Describe the role you're targeting. Used to generate search terms and rank results.
                 </p>
                 <textarea
+                    data-testid="search-intent-input"
                     value={intent}
                     onChange={(e) => setIntent(e.target.value)}
                     onBlur={handleIntentBlur}
@@ -138,6 +139,7 @@ function IntentTab(): React.ReactElement {
                 >
                     <h3 style={{ margin: 0, fontSize: '1rem' }}>Search Terms</h3>
                     <button
+                        data-testid="search-generate-btn"
                         onClick={handleGenerate}
                         disabled={generating}
                         style={{ padding: '6px 14px', fontWeight: 600, cursor: 'pointer' }}
@@ -155,6 +157,7 @@ function IntentTab(): React.ReactElement {
                         {terms.map((t) => (
                             <li
                                 key={t.id}
+                                data-testid={`search-term-item-${t.id}`}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
@@ -164,6 +167,7 @@ function IntentTab(): React.ReactElement {
                                 }}
                             >
                                 <input
+                                    data-testid={`search-term-toggle-${t.id}`}
                                     type="checkbox"
                                     checked={t.enabled}
                                     onChange={(e) => handleToggle(t.id, e.target.checked)}
@@ -190,6 +194,7 @@ function IntentTab(): React.ReactElement {
                                     {t.source === 'llm_generated' ? 'AI' : 'manual'}
                                 </span>
                                 <button
+                                    data-testid={`search-term-delete-${t.id}`}
                                     onClick={() => handleDelete(t.id)}
                                     style={{
                                         background: 'none',
@@ -210,6 +215,7 @@ function IntentTab(): React.ReactElement {
 
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <input
+                        data-testid="search-add-input"
                         value={newTerm}
                         onChange={(e) => setNewTerm(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTerm()}
@@ -224,6 +230,7 @@ function IntentTab(): React.ReactElement {
                         }}
                     />
                     <button
+                        data-testid="search-add-btn"
                         onClick={handleAddTerm}
                         style={{ padding: '6px 14px', cursor: 'pointer' }}
                     >
@@ -253,6 +260,7 @@ function IntentTab(): React.ReactElement {
                         </div>
                     </div>
                     <button
+                        data-testid="search-run-scrape-btn"
                         onClick={handleRunScrape}
                         disabled={scrapeState === 'running' || scrapeState === 'pending_commit'}
                         style={{ padding: '8px 16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -262,13 +270,14 @@ function IntentTab(): React.ReactElement {
                 </div>
 
                 {scrapeState === 'error' && errorMsg && (
-                    <div style={{ marginTop: '12px', color: 'crimson', fontSize: '0.85rem' }}>
+                    <div data-testid="search-error" style={{ marginTop: '12px', color: 'crimson', fontSize: '0.85rem' }}>
                         {errorMsg}
                     </div>
                 )}
 
                 {scrapeState === 'pending_commit' && summary && (
                     <div
+                        data-testid="search-summary"
                         style={{
                             marginTop: '16px',
                             border: '1px solid #d1d5db',
@@ -315,6 +324,7 @@ function IntentTab(): React.ReactElement {
                         </table>
                         <div style={{ marginTop: '14px', display: 'flex', gap: '8px' }}>
                             <button
+                                data-testid="search-commit-btn"
                                 onClick={handleCommit}
                                 disabled={committing || summary.netNew === 0}
                                 style={{ padding: '8px 20px', fontWeight: 600, cursor: 'pointer' }}
@@ -322,6 +332,7 @@ function IntentTab(): React.ReactElement {
                                 {committing ? 'Committing…' : `Commit ${summary.netNew} postings`}
                             </button>
                             <button
+                                data-testid="search-discard-btn"
                                 onClick={handleDiscard}
                                 disabled={committing}
                                 style={{ padding: '8px 16px', cursor: 'pointer' }}

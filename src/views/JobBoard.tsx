@@ -238,7 +238,7 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                 </thead>
                 <tbody>
                     {pagePostings.map((posting) => (
-                        <tr key={posting.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <tr key={posting.id} data-testid={`job-row-${posting.id}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
                             <td style={{ padding: '10px 12px 10px 0', fontWeight: 600 }}>{posting.company}</td>
                             <td
                                 style={{
@@ -266,10 +266,12 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                 {formatPostedAt(posting.posted_at, posting.fetched_at)}
                             </td>
                             <td style={{ padding: '10px 12px 10px 0' }}>
-                                <AffinityBadge
-                                    score={posting.affinity_score}
-                                    skipped={posting.affinity_skipped}
-                                />
+                                <span data-testid={`job-affinity-badge-${posting.id}`}>
+                                    <AffinityBadge
+                                        score={posting.affinity_score}
+                                        skipped={posting.affinity_skipped}
+                                    />
+                                </span>
                             </td>
                             <td style={{ padding: '10px 12px 10px 0' }}>
                                 <StatusBadge status={posting.status} />
@@ -283,12 +285,14 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                 }}
                             >
                                 <button
+                                    data-testid={`job-tailor-btn-${posting.id}`}
                                     onClick={() => handleTailorResume(posting)}
                                     style={{ fontSize: '0.78rem', padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
                                 >
                                     Tailor Resume
                                 </button>
                                 <button
+                                    data-testid={`job-open-btn-${posting.id}`}
                                     onClick={() => handleOpen(posting)}
                                     style={{ fontSize: '0.78rem', padding: '4px 10px', cursor: 'pointer' }}
                                 >

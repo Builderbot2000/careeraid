@@ -130,7 +130,7 @@ export default function Tracker(): React.ReactElement {
                 </thead>
                 <tbody>
                     {pagePostings.map((posting) => (
-                        <tr key={posting.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                        <tr key={posting.id} data-testid={`tracker-row-${posting.id}`} style={{ borderBottom: '1px solid #f3f4f6' }}>
                             <td style={{ padding: '10px 12px 10px 0', fontWeight: 600 }}>{posting.company}</td>
                             <td
                                 style={{
@@ -157,6 +157,7 @@ export default function Tracker(): React.ReactElement {
                             </td>
                             <td style={{ padding: '10px 12px 10px 0' }}>
                                 <select
+                                    data-testid={`tracker-status-select-${posting.id}`}
                                     value={posting.status}
                                     onChange={(e) => handleStatusChange(posting.id, e.target.value as PostingStatus)}
                                     style={{

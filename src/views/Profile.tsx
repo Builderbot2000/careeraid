@@ -199,96 +199,100 @@ export default function Profile(): React.ReactElement {
 
     // ─── Form view ────────────────────────────────────────────────────────────
 
-    if (mode === 'form') {
-        return (
-            <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-                    <button className="btn" onClick={cancelForm}>← Back</button>
-                    <h1 style={{ margin: 0 }}>{editingId ? 'Edit Entry' : 'New Entry'}</h1>
+    if (showForm) return (
+        <div data-testid="profile-form">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                <button className="btn" onClick={cancelForm}>← Back</button>
+                <h1 style={{ margin: 0 }}>{editingId ? 'Edit Entry' : 'New Entry'}</h1>
+            </div>
+
+            <div className="card">
+                <div className="form-row">
+                    <label>Type</label>
+                    <select
+                        data-testid="profile-form-type"
+                        value={form.type}
+                        onChange={(e) => setField('type', e.target.value as ProfileEntryType)}
+                    >
+                        {ENTRY_TYPES.map((t) => (
+                            <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+                        ))}
+                    </select>
                 </div>
 
-                <div className="card">
-                    <div className="form-row">
-                        <label>Type</label>
-                        <select
-                            value={form.type}
-                            onChange={(e) => setField('type', e.target.value as ProfileEntryType)}
-                        >
-                            {ENTRY_TYPES.map((t) => (
-                                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-                            ))}
-                        </select>
-                    </div>
+                <div className="form-row">
+                    <label>Title</label>
+                    <input
+                        data-testid="profile-form-title"
+                        type="text"
+                        value={form.title}
+                        placeholder="e.g. Senior Software Engineer at Acme Corp"
+                        onChange={(e) => setField('title', e.target.value)}
+                    />
+                </div>
 
+                <div className="form-row">
+                    <label>Content</label>
+                    <textarea
+                        data-testid="profile-form-content"
+                        value={form.content}
+                        rows={8}
+                        placeholder="Describe this entry…"
+                        onChange={(e) => setField('content', e.target.value)}
+                        style={{ resize: 'vertical', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }}
+                    />
+                    <div data-testid="profile-word-count" className="form-hint">{wordCount} word{wordCount !== 1 ? 's' : ''}</div>
+                </div>
+
+                <div className="form-row">
+                    <label>Tags</label>
+                    <input
+                        data-testid="profile-form-tags"
+                        type="text"
+                        value={form.tagsRaw}
+                        placeholder="typescript, node.js, leadership"
+                        onChange={(e) => setField('tagsRaw', e.target.value)}
+                    />
+                    <div className="form-hint">Comma-separated</div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-row">
-                        <label>Title</label>
+                        <label>Start date</label>
                         <input
-                            type="text"
-                            value={form.title}
-                            placeholder="e.g. Senior Software Engineer at Acme Corp"
-                            onChange={(e) => setField('title', e.target.value)}
+                            type="date"
+                            value={form.start_date}
+                            onChange={(e) => setField('start_date', e.target.value)}
                         />
                     </div>
-
                     <div className="form-row">
-                        <label>Content</label>
-                        <textarea
-                            value={form.content}
-                            rows={8}
-                            placeholder="Describe this entry…"
-                            onChange={(e) => setField('content', e.target.value)}
-                            style={{ resize: 'vertical', fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }}
-                        />
-                        <div className="form-hint">{wordCount} word{wordCount !== 1 ? 's' : ''}</div>
-                    </div>
-
-                    <div className="form-row">
-                        <label>Tags</label>
+                        <label>End date</label>
                         <input
-                            type="text"
-                            value={form.tagsRaw}
-                            placeholder="typescript, node.js, leadership"
-                            onChange={(e) => setField('tagsRaw', e.target.value)}
+                            type="date"
+                            value={form.end_date}
+                            onChange={(e) => setField('end_date', e.target.value)}
                         />
-                        <div className="form-hint">Comma-separated</div>
+                        <div className="form-hint">Leave blank if current / ongoing</div>
                     </div>
+                </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                        <div className="form-row">
-                            <label>Start date</label>
-                            <input
-                                type="date"
-                                value={form.start_date}
-                                onChange={(e) => setField('start_date', e.target.value)}
-                            />
-                        </div>
-                        <div className="form-row">
-                            <label>End date</label>
-                            <input
-                                type="date"
-                                value={form.end_date}
-                                onChange={(e) => setField('end_date', e.target.value)}
-                            />
-                            <div className="form-hint">Leave blank if current / ongoing</div>
-                        </div>
-                    </div>
+                {formError && (
+                    <div data-testid="profile-form-error" style={{ marginTop: 8, fontSize: 13, color: '#dc2626' }}>{formError}</div>
+                )}
 
-                    {formError && (
-                        <div style={{ marginTop: 8, fontSize: 13, color: '#dc2626' }}>{formError}</div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-                        <button className="btn btn-primary" onClick={handleSave} disabled={busy}>
-                            {busy ? 'Saving…' : editingId ? 'Save changes' : 'Add entry'}
-                        </button>
-                        <button className="btn" onClick={cancelForm} disabled={busy}>Cancel</button>
-                    </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                    <button data-testid="profile-form-save" className="btn btn-primary" onClick={handleSave} disabled={busy}>
+                        {busy ? 'Saving…' : editingId ? 'Save changes' : 'Add entry'}
+                    </button>
+                    <button className="btn" onClick={cancelForm} disabled={busy}>Cancel</button>
                 </div>
             </div>
-        )
-    }
+        </div >
+    )
+
 
     // ─── List view ────────────────────────────────────────────────────────────
+
 
     return (
         <div>
@@ -302,6 +306,7 @@ export default function Profile(): React.ReactElement {
                             <label>Years of experience</label>
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <input
+                                    data-testid="profile-yoe-input"
                                     type="number"
                                     min={0}
                                     max={60}
@@ -311,7 +316,7 @@ export default function Profile(): React.ReactElement {
                                     onKeyDown={(e) => { if (e.key === 'Enter') handleSaveYoe() }}
                                     style={{ width: 90 }}
                                 />
-                                <button className="btn btn-primary" onClick={handleSaveYoe}>Save</button>
+                                <button data-testid="profile-yoe-save" className="btn btn-primary" onClick={handleSaveYoe}>Save</button>
                             </div>
                             <div className="form-hint">Used for YOE hard filter in job matching.</div>
                         </div>
@@ -343,6 +348,7 @@ export default function Profile(): React.ReactElement {
                     )
                 })}
                 <button
+                    data-testid="profile-add-btn"
                     className="btn btn-primary"
                     onClick={openAdd}
                     style={{ marginLeft: 'auto' }}
@@ -360,7 +366,7 @@ export default function Profile(): React.ReactElement {
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {filtered.map((entry) => (
-                        <div key={entry.id} className="card" style={{ margin: 0 }}>
+                        <div key={entry.id} data-testid={`profile-entry-${entry.id}`} className="card" style={{ margin: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                                 {/* Type badge */}
                                 <span style={{
@@ -418,6 +424,7 @@ export default function Profile(): React.ReactElement {
                                 {/* Actions */}
                                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                                     <button
+                                        data-testid={`profile-entry-edit-${entry.id}`}
                                         className="btn"
                                         style={{ fontSize: 12, padding: '3px 10px' }}
                                         onClick={() => openEdit(entry)}
@@ -425,6 +432,7 @@ export default function Profile(): React.ReactElement {
                                         Edit
                                     </button>
                                     <button
+                                        data-testid={`profile-entry-delete-${entry.id}`}
                                         className="btn btn-danger"
                                         style={{ fontSize: 12, padding: '3px 10px' }}
                                         onClick={() => handleDelete(entry.id)}

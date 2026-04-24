@@ -5,9 +5,9 @@ interface Props {
     featureLocks: FeatureLocks
 }
 
-function LockRow({ label, locked }: { label: string; locked: boolean }): React.ReactElement {
+function LockRow({ label, locked, testId }: { label: string; locked: boolean; testId?: string }): React.ReactElement {
     return (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+        <div data-testid={testId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
             <span style={{ fontSize: 13 }}>{label}</span>
             <span className={`badge ${locked ? 'badge-err' : 'badge-ok'}`}>
                 {locked ? 'Locked' : 'OK'}
@@ -64,11 +64,11 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             {/* Feature status */}
             <div className="card">
                 <h2>Feature Status</h2>
-                <LockRow label="Claude API key" locked={featureLocks.claudeApiKey} />
-                <LockRow label="Claude connectivity" locked={featureLocks.claudeConnectivity} />
-                <LockRow label="xelatex binary" locked={featureLocks.xelatex} />
-                <LockRow label="Playwright Chromium" locked={featureLocks.playwrightChromium} />
-                <LockRow label="Profile has entries" locked={featureLocks.profileEmpty} />
+                <LockRow label="Claude API key" locked={featureLocks.claudeApiKey} testId="settings-lock-claudeApiKey" />
+                <LockRow label="Claude connectivity" locked={featureLocks.claudeConnectivity} testId="settings-lock-claudeConnectivity" />
+                <LockRow label="xelatex binary" locked={featureLocks.xelatex} testId="settings-lock-xelatex" />
+                <LockRow label="Playwright Chromium" locked={featureLocks.playwrightChromium} testId="settings-lock-playwrightChromium" />
+                <LockRow label="Profile has entries" locked={featureLocks.profileEmpty} testId="settings-lock-profileEmpty" />
             </div>
 
             {/* API key */}
@@ -80,6 +80,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                 </p>
                 <div style={{ display: 'flex', gap: 8 }}>
                     <input
+                        data-testid="settings-api-key-input"
                         type="password"
                         placeholder={apiKeyPresent ? '••••••••••••••••' : 'sk-ant-…'}
                         value={apiKeyInput}
@@ -87,16 +88,16 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         onKeyDown={(e) => { if (e.key === 'Enter') handleSetApiKey() }}
                         style={{ flex: 1 }}
                     />
-                    <button className="btn btn-primary" onClick={handleSetApiKey} disabled={saving || !apiKeyInput.trim()}>
+                    <button data-testid="settings-api-key-save" className="btn btn-primary" onClick={handleSetApiKey} disabled={saving || !apiKeyInput.trim()}>
                         {apiKeyPresent ? 'Update' : 'Save'}
                     </button>
                     {apiKeyPresent && (
-                        <button className="btn btn-danger" onClick={handleDeleteApiKey} disabled={saving}>
+                        <button data-testid="settings-api-key-remove" className="btn btn-danger" onClick={handleDeleteApiKey} disabled={saving}>
                             Remove
                         </button>
                     )}
                 </div>
-                {msg && <div className="form-hint" style={{ marginTop: 8 }}>{msg}</div>}
+                {msg && <div data-testid="settings-msg" className="form-hint" style={{ marginTop: 8 }}>{msg}</div>}
             </div>
 
             {/* Paths */}
@@ -193,6 +194,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                 <h2>Backup &amp; Export</h2>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                     <button
+                        data-testid="settings-backup-btn"
                         className="btn"
                         onClick={async () => {
                             const path = await window.api.createBackup()
@@ -202,6 +204,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         Create Backup (.db)
                     </button>
                     <button
+                        data-testid="settings-export-btn"
                         className="btn"
                         onClick={async () => {
                             const path = await window.api.exportData()
@@ -221,6 +224,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         <option value="replace">Replace (clear first)</option>
                     </select>
                     <button
+                        data-testid="settings-import-btn"
                         className="btn btn-danger"
                         onClick={async () => {
                             const result = await window.api.importData(importMode)
