@@ -30,6 +30,7 @@ export const test = base.extend<AppFixtures>({
 
     const electronApp = await electron.launch({
       args: [path.join(__dirname, '../../../out/main/index.js')],
+      headless: true,
       env: {
         ...process.env,
         NODE_ENV: 'test',
