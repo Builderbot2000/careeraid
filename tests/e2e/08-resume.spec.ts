@@ -1,6 +1,6 @@
 import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
 
-test.describe('Resume Generation', () => {
+test.describe('Resume Module', () => {
   test('Resume nav item shows a lock when the API key is absent', async ({ page }) => {
     // On a fresh launch with no key, Resume should be locked in the sidebar
     const resumeNavBtn = page.getByRole('button', { name: /Resume/i })

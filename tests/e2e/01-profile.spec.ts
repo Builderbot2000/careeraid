@@ -1,6 +1,6 @@
 import { test, expect, goTo } from './fixtures/app'
 
-test.describe('Profile Management', () => {
+test.describe('Profile Module', () => {
   test('displays the Profile view with no entries on first launch', async ({ page }) => {
     await goTo(page, 'Profile')
     await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()

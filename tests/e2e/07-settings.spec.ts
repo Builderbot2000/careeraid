@@ -1,6 +1,6 @@
 import { test, expect, goTo } from './fixtures/app'
 
-test.describe('Settings', () => {
+test.describe('Settings Module', () => {
   test('Settings view renders all configurable fields', async ({ page }) => {
     await goTo(page, 'Settings')
     await expect(page.getByText(/API key/i)).toBeVisible()

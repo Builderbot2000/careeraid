@@ -1,6 +1,6 @@
 import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
 
-test.describe('Analytics Dashboard', () => {
+test.describe('Analytics Module', () => {
   test('Analytics view renders with all metric sections', async ({ page }) => {
     await goTo(page, 'Analytics')
     await expect(page.getByText(/Funnel|Response rate|Conversion/i).first()).toBeVisible()

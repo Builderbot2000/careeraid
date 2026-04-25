@@ -2,7 +2,7 @@ import { test, expect, goTo } from './fixtures/app'
 import path from 'path'
 import fs from 'fs'
 
-test.describe('Backup, Export, and Import', () => {
+test.describe('Data Management Module', () => {
   async function addProfileEntry(page: import('playwright').Page, title: string) {
     await goTo(page, 'Profile')
     await page.getByRole('button', { name: /New Entry|Add Entry/i }).click()

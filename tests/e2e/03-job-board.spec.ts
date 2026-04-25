@@ -1,6 +1,6 @@
 import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
 
-test.describe('Job Board', () => {
+test.describe('Job Board & Ranking Module', () => {
   test.beforeEach(async ({ page }) => {
     await runAndCommitScrape(page)
     await goTo(page, 'Job Board')

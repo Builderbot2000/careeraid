@@ -51,6 +51,6 @@ A local-first desktop application for managing a career profile, generating tail
 
 - [Getting Started](getting-started) — installation, first launch, data locations
 - [Architecture](architecture/) — how all the modules fit together
-- [Specifications](spec) — full product requirements and acceptance criteria
+- [Specifications](spec/) — full product requirements and acceptance criteria, organized by module
 - [Testing](testing) — two-layer test strategy (Vitest + Playwright)
 - [Development Process](development-process) — AI-native development loop

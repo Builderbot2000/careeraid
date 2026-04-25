@@ -1,6 +1,6 @@
 import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
 
-test.describe('Application Tracking', () => {
+test.describe('Application Tracking Module', () => {
   test.beforeEach(async ({ page }) => {
     await runAndCommitScrape(page)
   })
