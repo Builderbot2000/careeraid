@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test:e2e": "npm run build && playwright test --config tests/playwright.config.ts",
     "test:e2e:headed": "npm run build && playwright test --config tests/playwright.config.ts --headed",
+    "test:e2e:grep": "npm run build && playwright test --config tests/playwright.config.ts -g",
     "render:sdlc": "node docs/render-diagram.js docs/AISDLC_diagram.md"
   },
   "dependencies": {
