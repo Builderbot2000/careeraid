@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import type { JobPosting } from '../shared/ipc-types'
 
 const PAGE_SIZE = 50
@@ -66,7 +66,7 @@ function AffinityBadge({
                 }}
                 title="Affinity scoring skipped (below threshold)"
             >
-                –
+                small batch
             </span>
         )
     }
@@ -164,6 +164,8 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
+    const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
+    const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const loadPostings = useCallback(async () => {
         try {
@@ -248,9 +250,23 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                     textOverflow: 'ellipsis',
                                     whiteSpace: 'nowrap',
                                 }}
-                                title={posting.title}
                             >
-                                {posting.title}
+                                <a
+                                    href="#"
+                                    onClick={(e) => e.preventDefault()}
+                                    style={{ textDecoration: 'none', color: 'inherit' }}
+                                    onMouseEnter={(e) => {
+                                        if (!posting.affinity_reasoning) return
+                                        if (tooltipTimer.current) clearTimeout(tooltipTimer.current)
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                                        setTooltip({ x: rect.left, y: rect.bottom + 6, text: posting.affinity_reasoning })
+                                    }}
+                                    onMouseLeave={() => {
+                                        tooltipTimer.current = setTimeout(() => setTooltip(null), 200)
+                                    }}
+                                >
+                                    {posting.title}
+                                </a>
                             </td>
                             <td
                                 style={{
@@ -305,7 +321,28 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
             </table>
 
             <Pagination page={page} totalPages={totalPages} onPage={setPage} />
+
+            {tooltip && (
+                <div
+                    role="tooltip"
+                    style={{
+                        position: 'fixed',
+                        left: tooltip.x,
+                        top: tooltip.y,
+                        background: '#1f2937',
+                        color: '#f9fafb',
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        maxWidth: '320px',
+                        zIndex: 9999,
+                        pointerEvents: 'none',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    }}
+                >
+                    {tooltip.text}
+                </div>
+            )}
         </div>
     )
 }
-

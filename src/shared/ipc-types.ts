@@ -106,6 +106,7 @@ export interface JobPosting {
   affinity_score: number | null
   affinity_skipped: boolean
   affinity_scored_at: string | null
+  affinity_reasoning: string | null
   first_response_at: string | null
   last_seen_at: string
 }

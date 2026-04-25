@@ -5,6 +5,7 @@ import sql003 from './003_resume.sql?raw'
 import sql004 from './004_jobs.sql?raw'
 import sql005 from './005_safe_storage.sql?raw'
 import sql006 from './006_llm_usage.sql?raw'
+import sql007 from './007_affinity_reasoning.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -17,6 +18,7 @@ const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '004_jobs.sql', sql: sql004 },
   { filename: '005_safe_storage.sql', sql: sql005 },
   { filename: '006_llm_usage.sql', sql: sql006 },
+  { filename: '007_affinity_reasoning.sql', sql: sql007 },
 ]
 
 export function runMigrations(

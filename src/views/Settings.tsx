@@ -23,10 +23,14 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
     const [saving, setSaving] = useState(false)
     const [msg, setMsg] = useState('')
     const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
+    const [affinitySkipThreshold, setAffinitySkipThreshold] = useState(15)
 
     useEffect(() => {
         window.api.getSettings().then(setSettings)
         window.api.getApiKeyPresent().then(setApiKeyPresent)
+        window.api.getSearchConfig().then((cfg) => {
+            setAffinitySkipThreshold(cfg.affinity_skip_threshold ?? 15)
+        })
     }, [])
 
     async function saveSetting<K extends keyof SettingsType>(key: K, value: SettingsType[K]): Promise<void> {
@@ -60,6 +64,34 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
     return (
         <div>
             <h1>Settings</h1>
+
+            {/* Job Matching */}
+            <div className="card">
+                <h2>Job Matching</h2>
+                <div className="form-row">
+                    <label htmlFor="settings-affinity-skip-threshold-top">Affinity skip threshold</label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                            id="settings-affinity-skip-threshold-top"
+                            type="number"
+                            min={0}
+                            max={500}
+                            value={affinitySkipThreshold}
+                            onChange={(e) => setAffinitySkipThreshold(Number(e.target.value))}
+                            style={{ width: 80 }}
+                        />
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => {
+                                window.api.updateSearchConfig({ affinity_skip_threshold: affinitySkipThreshold }).catch(console.error)
+                            }}
+                        >
+                            Apply
+                        </button>
+                    </div>
+                    <div className="form-hint">Skip LLM affinity scoring when posting count is below this value (default 15).</div>
+                </div>
+            </div>
 
             {/* Feature status */}
             <div className="card">

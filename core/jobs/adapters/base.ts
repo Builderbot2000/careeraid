@@ -41,6 +41,7 @@ export const JobPostingSchema = z.object({
   affinity_score: z.number().nullable(),
   affinity_skipped: z.boolean(),
   affinity_scored_at: z.string().nullable(),
+  affinity_reasoning: z.string().nullable(),
   first_response_at: z.string().nullable(),
   last_seen_at: z.string(),
 })
@@ -70,6 +71,7 @@ export interface JobPostingRow {
   affinity_score: number | null
   affinity_skipped: number  // SQLite integer 0/1
   affinity_scored_at: string | null
+  affinity_reasoning: string | null
   first_response_at: string | null
   last_seen_at: string
 }

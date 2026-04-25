@@ -352,9 +352,19 @@ function IntentTab(): React.ReactElement {
 function FiltersTab(): React.ReactElement {
     const [config, setConfig] = useState<Partial<SearchConfigRow>>({})
     const [saved, setSaved] = useState(false)
+    const [excludedStack, setExcludedStack] = useState('')
+    const [requiredKeywords, setRequiredKeywords] = useState('')
+    const [excludedKeywords, setExcludedKeywords] = useState('')
+    const [threshold, setThreshold] = useState('')
 
     useEffect(() => {
-        window.api.getSearchConfig().then(setConfig)
+        window.api.getSearchConfig().then((cfg) => {
+            setConfig(cfg)
+            setExcludedStack(arrayToField(cfg.excluded_stack))
+            setRequiredKeywords(arrayToField(cfg.required_keywords))
+            setExcludedKeywords(arrayToField(cfg.excluded_keywords))
+            setThreshold(String(cfg.affinity_skip_threshold ?? 15))
+        })
     }, [])
 
     function parseArray(val: unknown): string[] {
@@ -408,6 +418,16 @@ function FiltersTab(): React.ReactElement {
         }
     }
 
+    async function handleSaveAll(): Promise<void> {
+        const n = parseInt(threshold, 10)
+        await save({
+            required_keywords: fieldToArray(requiredKeywords),
+            excluded_keywords: fieldToArray(excludedKeywords),
+            excluded_stack: fieldToArray(excludedStack),
+            ...((!isNaN(n) && n >= 0) ? { affinity_skip_threshold: n } : {}),
+        })
+    }
+
     const textareaStyle: React.CSSProperties = {
         display: 'block',
         width: '100%',
@@ -452,14 +472,15 @@ function FiltersTab(): React.ReactElement {
             )}
 
             <div style={{ marginBottom: '24px' }}>
-                <label style={labelStyle}>Required Keywords (OR — one per line)</label>
+                <label htmlFor="filters-required-keywords" style={labelStyle}>Required Keywords (OR — one per line)</label>
                 <p style={hintStyle}>
                     At least one must match in title or tech stack. Prefix with <code>re:</code> for regex.
                 </p>
                 <textarea
+                    id="filters-required-keywords"
                     rows={4}
-                    defaultValue={arrayToField(config.required_keywords)}
-                    key={`req-${JSON.stringify(config.required_keywords)}`}
+                    value={requiredKeywords}
+                    onChange={(e) => setRequiredKeywords(e.target.value)}
                     onBlur={(e) => handleKeywordsBlur('required_keywords', e.target.value)}
                     style={textareaStyle}
                     placeholder="e.g. TypeScript&#10;Go&#10;re:rust|zig"
@@ -467,14 +488,15 @@ function FiltersTab(): React.ReactElement {
             </div>
 
             <div style={{ marginBottom: '24px' }}>
-                <label style={labelStyle}>Excluded Keywords (one per line)</label>
+                <label htmlFor="filters-excluded-keywords" style={labelStyle}>Excluded Keywords (one per line)</label>
                 <p style={hintStyle}>
                     Drop postings matching any of these. Prefix with <code>re:</code> for regex.
                 </p>
                 <textarea
+                    id="filters-excluded-keywords"
                     rows={4}
-                    defaultValue={arrayToField(config.excluded_keywords)}
-                    key={`exc-${JSON.stringify(config.excluded_keywords)}`}
+                    value={excludedKeywords}
+                    onChange={(e) => setExcludedKeywords(e.target.value)}
                     onBlur={(e) => handleKeywordsBlur('excluded_keywords', e.target.value)}
                     style={textareaStyle}
                     placeholder="e.g. internship&#10;re:junior|entry.level"
@@ -482,31 +504,33 @@ function FiltersTab(): React.ReactElement {
             </div>
 
             <div style={{ marginBottom: '24px' }}>
-                <label style={labelStyle}>Excluded Tech Stack (one per line)</label>
+                <label htmlFor="filters-excluded-stack" style={labelStyle}>Excluded Tech Stack (one per line)</label>
                 <p style={hintStyle}>
                     Drop postings where tech_stack contains any of these terms.
                 </p>
                 <textarea
+                    id="filters-excluded-stack"
                     rows={4}
-                    defaultValue={arrayToField(config.excluded_stack)}
-                    key={`stack-${JSON.stringify(config.excluded_stack)}`}
+                    value={excludedStack}
+                    onChange={(e) => setExcludedStack(e.target.value)}
                     onBlur={(e) => handleStackBlur(e.target.value)}
                     style={textareaStyle}
                     placeholder="e.g. PHP&#10;Ruby on Rails"
                 />
             </div>
 
-            <div>
-                <label style={labelStyle}>Affinity Scoring Skip Threshold</label>
+            <div style={{ marginBottom: '24px' }}>
+                <label htmlFor="filters-threshold" style={labelStyle}>Affinity Scoring Skip Threshold</label>
                 <p style={hintStyle}>
                     When fewer than this many postings need scoring, skip LLM scoring and mark them as
                     skipped. 0 = always score.
                 </p>
                 <input
+                    id="filters-threshold"
                     type="number"
                     min={0}
-                    defaultValue={config.affinity_skip_threshold ?? 15}
-                    key={`thresh-${config.affinity_skip_threshold}`}
+                    value={threshold}
+                    onChange={(e) => setThreshold(e.target.value)}
                     onBlur={(e) => handleThresholdBlur(e.target.value)}
                     style={{
                         width: '80px',
@@ -518,6 +542,13 @@ function FiltersTab(): React.ReactElement {
                     }}
                 />
             </div>
+
+            <button
+                onClick={handleSaveAll}
+                style={{ padding: '8px 20px', fontWeight: 600, cursor: 'pointer' }}
+            >
+                Save
+            </button>
         </div>
     )
 }

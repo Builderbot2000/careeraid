@@ -307,9 +307,10 @@ export default function Profile(): React.ReactElement {
                 <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                     <div style={{ flex: '1 1 200px' }}>
                         <div className="form-row" style={{ marginBottom: 0 }}>
-                            <label>Years of experience</label>
+                            <label htmlFor="profile-yoe">Years of experience</label>
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <input
+                                    id="profile-yoe"
                                     data-testid="profile-yoe-input"
                                     type="number"
                                     min={0}

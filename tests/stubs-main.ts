@@ -58,19 +58,31 @@ export function registerTestStubs(): void {
   ipcMain.removeHandler('jobs:get-postings')
   ipcMain.handle('jobs:get-postings', () => {
     const db = getDb()
-    // Stamp stub affinity scores for any unscored postings
-    const unscored = db
-      .prepare("SELECT id FROM job_postings WHERE affinity_score IS NULL AND status != 'archived'")
-      .all() as { id: string }[]
 
-    if (unscored.length > 0) {
-      const now = new Date().toISOString()
-      const update = db.prepare(
-        'UPDATE job_postings SET affinity_score = ?, affinity_scored_at = ? WHERE id = ?',
-      )
-      for (const { id } of unscored) {
-        const scored = stubAffinityScore(id)
-        update.run(scored.affinity_score, now, id)
+    // Check current threshold setting
+    const cfg = db.prepare('SELECT affinity_skip_threshold FROM search_config WHERE id = 1').get() as { affinity_skip_threshold: number } | undefined
+    const skipThreshold = cfg?.affinity_skip_threshold ?? 15
+
+    const total = (db.prepare("SELECT COUNT(*) as cnt FROM job_postings WHERE status != 'archived'").get() as { cnt: number }).cnt
+
+    if (total <= skipThreshold) {
+      // Mark all as skipped
+      db.prepare("UPDATE job_postings SET affinity_skipped = 1, affinity_score = NULL, affinity_scored_at = NULL WHERE status != 'archived'").run()
+    } else {
+      // Stamp stub affinity scores for any unscored postings
+      const unscored = db
+        .prepare("SELECT id FROM job_postings WHERE affinity_score IS NULL AND affinity_skipped = 0 AND status != 'archived'")
+        .all() as { id: string }[]
+
+      if (unscored.length > 0) {
+        const now = new Date().toISOString()
+        const update = db.prepare(
+          'UPDATE job_postings SET affinity_score = ?, affinity_reasoning = ?, affinity_scored_at = ?, affinity_skipped = 0 WHERE id = ?',
+        )
+        for (const { id } of unscored) {
+          const scored = stubAffinityScore(id)
+          update.run(scored.affinity_score, scored.reasoning, now, id)
+        }
       }
     }
 

@@ -86,7 +86,8 @@ export async function scorePostings(
   const client = new Anthropic({ apiKey })
   const updatePosting = db.prepare(
     `UPDATE job_postings
-     SET affinity_score = @score, affinity_scored_at = @scored_at, affinity_skipped = 0
+     SET affinity_score = @score, affinity_scored_at = @scored_at, affinity_skipped = 0,
+         affinity_reasoning = @reasoning
      WHERE id = @id`,
   )
 
@@ -140,7 +141,7 @@ export async function scorePostings(
       // On batch failure, assign neutral fallback scores (unverified)
       db.transaction(() => {
         for (const p of batch) {
-          updatePosting.run({ score: 0.5, scored_at: now, id: p.id })
+          updatePosting.run({ score: 0.5, scored_at: now, id: p.id, reasoning: null })
         }
       })()
       continue
@@ -154,6 +155,7 @@ export async function scorePostings(
         const item = scoreMap.get(p.id)
         updatePosting.run({
           score: item ? item.affinity_score : 0.5,
+          reasoning: item ? item.reasoning : null,
           scored_at: now,
           id: p.id,
         })
