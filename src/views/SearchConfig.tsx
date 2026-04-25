@@ -46,8 +46,8 @@ function IntentTab(): React.ReactElement {
     }
 
     async function handleToggle(id: string, enabled: boolean): Promise<void> {
-        await window.api.updateSearchTerm(id, { enabled })
         setTerms((prev) => prev.map((t) => (t.id === id ? { ...t, enabled } : t)))
+        await window.api.updateSearchTerm(id, { enabled })
     }
 
     async function handleDelete(id: string): Promise<void> {

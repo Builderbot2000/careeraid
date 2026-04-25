@@ -78,6 +78,6 @@ export async function runAndCommitScrape(page: Page): Promise<void> {
   // Wait for the commit summary to appear
   await page.waitForSelector('text=Net new to commit', { timeout: 15_000 })
   await page.getByRole('button', { name: /Commit/i }).click()
-  // Wait for idle state
-  await page.waitForSelector('text=Run Scrape', { timeout: 10_000 })
+  // Wait for the commit to complete (summary section disappears)
+  await page.waitForSelector('[data-testid="search-commit-btn"]', { state: 'detached', timeout: 10_000 })
 }

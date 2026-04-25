@@ -52,7 +52,6 @@ test.describe('Profile Management', () => {
     await goTo(page, 'Settings')
     const wordLimitInput = page.getByLabel(/Profile entry word limit|Word limit/i)
     await wordLimitInput.fill('5')
-    await page.getByRole('button', { name: /Save|Apply/i }).first().click()
 
     await goTo(page, 'Profile')
     await page.getByRole('button', { name: /New Entry|Add Entry/i }).click()
@@ -92,7 +91,7 @@ test.describe('Profile Management', () => {
 
     // Filter to skills only
     await page.getByRole('button', { name: /Skill/i }).click()
-    await expect(page.getByText('TypeScript')).toBeVisible()
+    await expect(page.getByText('TypeScript', { exact: true })).toBeVisible()
     await expect(page.getByText('BSc Computer Science')).not.toBeVisible()
   })
 })

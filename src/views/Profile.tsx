@@ -199,7 +199,7 @@ export default function Profile(): React.ReactElement {
 
     // ─── Form view ────────────────────────────────────────────────────────────
 
-    if (showForm) return (
+    if (mode === 'form') return (
         <div data-testid="profile-form">
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
                 <button className="btn" onClick={cancelForm}>← Back</button>
@@ -208,8 +208,9 @@ export default function Profile(): React.ReactElement {
 
             <div className="card">
                 <div className="form-row">
-                    <label>Type</label>
+                    <label htmlFor="profile-form-type">Type</label>
                     <select
+                        id="profile-form-type"
                         data-testid="profile-form-type"
                         value={form.type}
                         onChange={(e) => setField('type', e.target.value as ProfileEntryType)}
@@ -221,8 +222,9 @@ export default function Profile(): React.ReactElement {
                 </div>
 
                 <div className="form-row">
-                    <label>Title</label>
+                    <label htmlFor="profile-form-title">Title</label>
                     <input
+                        id="profile-form-title"
                         data-testid="profile-form-title"
                         type="text"
                         value={form.title}
@@ -232,8 +234,9 @@ export default function Profile(): React.ReactElement {
                 </div>
 
                 <div className="form-row">
-                    <label>Content</label>
+                    <label htmlFor="profile-form-content">Content</label>
                     <textarea
+                        id="profile-form-content"
                         data-testid="profile-form-content"
                         value={form.content}
                         rows={8}
@@ -245,8 +248,9 @@ export default function Profile(): React.ReactElement {
                 </div>
 
                 <div className="form-row">
-                    <label>Tags</label>
+                    <label htmlFor="profile-form-tags">Tags</label>
                     <input
+                        id="profile-form-tags"
                         data-testid="profile-form-tags"
                         type="text"
                         value={form.tagsRaw}
@@ -385,7 +389,7 @@ export default function Profile(): React.ReactElement {
 
                                 {/* Content */}
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: 14 }}>{entry.title}</div>
+                                    <div style={{ fontWeight: 600, fontSize: 14, cursor: 'pointer' }} onClick={() => openEdit(entry)}>{entry.title}</div>
 
                                     {(entry.start_date || entry.end_date) && (
                                         <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginTop: 2 }}>

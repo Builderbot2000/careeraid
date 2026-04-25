@@ -166,8 +166,9 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             <div className="card">
                 <h2>Profile &amp; LLM</h2>
                 <div className="form-row">
-                    <label>Profile entry word limit</label>
+                    <label htmlFor="settings-word-limit">Profile entry word limit</label>
                     <input
+                        id="settings-word-limit"
                         type="number"
                         min={50}
                         max={1000}

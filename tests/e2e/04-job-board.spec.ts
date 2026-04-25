@@ -8,7 +8,7 @@ test.describe('Job Board', () => {
 
   test('displays postings after a committed scrape', async ({ page }) => {
     // At least one posting should be visible
-    await expect(page.getByText('Stripe').or(page.getByText('Vercel')).or(page.getByText('Linear'))).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText('Stripe').or(page.getByText('Vercel')).or(page.getByText('Linear')).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('postings show company, title, location, seniority, tech stack, and age', async ({ page }) => {

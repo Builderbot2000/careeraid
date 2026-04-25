@@ -15,7 +15,7 @@ test.describe('Scrape Execution', () => {
 
     await expect(page.getByText('Fetched')).toBeVisible()
     // Mock adapter always returns 15 deterministic postings
-    await expect(page.getByText('15')).toBeVisible()
+    await expect(page.getByText('15').first()).toBeVisible()
     await expect(page.getByText('Net new to commit')).toBeVisible()
   })
 

@@ -15,8 +15,18 @@ import { renderTex } from '../core/resume/renderer'
 import { compileTex } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
 import { app } from 'electron'
+import { runScrape } from '../core/jobs/aggregator'
+import { MockAdapter } from '../core/jobs/adapters/mock'
+import { getRankedPostings } from '../core/jobs/ranker'
 
 export function registerTestStubs(): void {
+  // ─── Scrape — add a small delay so the 'Running…' UI state is observable ────
+  ipcMain.removeHandler('jobs:run-scrape')
+  ipcMain.handle('jobs:run-scrape', async () => {
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    return runScrape(getDb(), [new MockAdapter()])
+  })
+
   // ─── Search term generation ─────────────────────────────────────────────────
   // Override: return deterministic AI-suggested terms without calling Claude.
   ipcMain.removeHandler('search-terms:generate')
@@ -64,10 +74,8 @@ export function registerTestStubs(): void {
       }
     }
 
-    // Now delegate to the real ranking logic (re-import to avoid circular dep)
+    // Now delegate to the real ranking logic.
     // Since we've already stamped scores, the ranker won't call Claude.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { getRankedPostings } = require('./core/jobs/ranker')
     return getRankedPostings(db, null)
   })
 
