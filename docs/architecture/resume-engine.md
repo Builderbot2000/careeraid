@@ -107,7 +107,7 @@ On validation failure, error messages are fed back into a retry call (max 2 retr
 
 ## Step 4 — Nunjucks Rendering (`renderer.ts`)
 
-The validated object is passed to the selected `.tex.njk` template via Nunjucks. Template syntax is nearly identical to Jinja2 — `{% for %}`, `{% if %}`, `{{ var }}` all behave the same way. Output is a `.tex` file written to `<userData>/resumes/<application_id>/resume.tex`.
+The validated object is passed to the selected `.tex.njk` template via Nunjucks. Template syntax is nearly identical to Jinja2 — {% raw %}`{% for %}`, `{% if %}`, `{{ var }}`{% endraw %} all behave the same way. Output is a `.tex` file written to `<userData>/resumes/<application_id>/resume.tex`.
 
 ```typescript
 // core/resume/renderer.ts
