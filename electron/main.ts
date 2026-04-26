@@ -33,6 +33,7 @@ import { renderTex } from '../core/resume/renderer'
 import { compileTex, recompileFromSnapshot } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
 import type { Application } from '../src/shared/ipc-types'
+import { chromium } from 'playwright'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
@@ -687,13 +688,34 @@ function registerIpcHandlers(): void {
 
   // ─── Jobs ─────────────────────────────────────────────────────────────────
 
-  ipcMain.handle('jobs:run-scrape', async () => {
-    const adapters: InstanceType<typeof MockAdapter | typeof LinkedInAdapter>[] = [new MockAdapter()]
-    const playwrightDir = path.join(app.getPath('userData'), 'ms-playwright')
-    if (fs.existsSync(playwrightDir)) {
-      adapters.push(new LinkedInAdapter())
+  function linkedInAvailable(): boolean {
+    try { return fs.existsSync(chromium.executablePath()) } catch { return false }
+  }
+
+  ipcMain.handle('jobs:list-adapters', () => [
+    {
+      id: 'mock',
+      name: 'Mock Adapter',
+      description: 'Returns hardcoded sample postings — for development and testing',
+      available: true,
+    },
+    {
+      id: 'linkedin',
+      name: 'LinkedIn',
+      description: 'Scrapes LinkedIn public job search (no login required)',
+      available: linkedInAvailable(),
+    },
+  ])
+
+  ipcMain.handle('jobs:run-scrape', async (_event, adapterIds?: string[]) => {
+    const all: InstanceType<typeof MockAdapter | typeof LinkedInAdapter>[] = [new MockAdapter()]
+    if (linkedInAvailable()) {
+      all.push(new LinkedInAdapter())
     }
-    return runScrape(getDb(), adapters)
+    const adapters = adapterIds ? all.filter((a) => adapterIds.includes(a.id)) : all
+    return runScrape(getDb(), adapters, (p) => {
+      mainWindow?.webContents.send('jobs:adapter-progress', p)
+    })
   })
 
   ipcMain.handle('jobs:commit-scrape', () => {

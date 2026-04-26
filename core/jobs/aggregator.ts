@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
 import type { JobPosting } from './adapters/base'
 import type { BaseAdapter } from './adapters/base'
-import type { ScrapeSummary } from '../../src/shared/ipc-types'
+import type { AdapterProgress, ScrapeSummary } from '../../src/shared/ipc-types'
 
 // In-memory staging buffer — held between runScrape and commitScrape/discardScrape.
 // Safe because all IPC calls execute synchronously on the main process.
@@ -127,6 +127,7 @@ function applyKeywordFilters(
 export async function runScrape(
   db: Database.Database,
   adapters: BaseAdapter[],
+  onProgress?: (p: AdapterProgress) => void,
 ): Promise<ScrapeSummary> {
   // Collect existing URLs and composite keys from DB for dedup
   const existingUrls = new Set<string>(
@@ -146,7 +147,23 @@ export async function runScrape(
   let dupes = 0
 
   for (const adapter of adapters) {
-    const postings = await adapter.search('', {})
+    onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
+    let adapterFetched = 0
+    let postings: Awaited<ReturnType<typeof adapter.search>>
+    try {
+      postings = await adapter.search('', {}, () => {
+        adapterFetched++
+        onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
+      })
+    } catch (err) {
+      onProgress?.({
+        adapterId: adapter.id,
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      })
+      continue
+    }
+    onProgress?.({ adapterId: adapter.id, status: 'done', fetched: postings.length })
     fetched += postings.length
 
     for (const posting of postings) {

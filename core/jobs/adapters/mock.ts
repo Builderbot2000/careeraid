@@ -426,12 +426,14 @@ const MOCK_POOL: Omit<JobPosting, 'id'>[] = [
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 export class MockAdapter extends BaseAdapter {
+  override readonly id = 'mock'
   override readonly delayMs = CRAWL_DELAY_MS
   override readonly availableSignals = new Set(['recency'])
 
   override async search(
     _term: string,
     _filters: SearchFilters,
+    onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
     const now = new Date().toISOString()
     const count =
@@ -454,6 +456,7 @@ export class MockAdapter extends BaseAdapter {
         await new Promise((r) => setTimeout(r, delay))
       }
       results.push({ ...posting, fetched_at: now, last_seen_at: now })
+      onPosting?.()
     }
     return results
   }

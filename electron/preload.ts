@@ -11,6 +11,7 @@ import type {
   SearchTerm,
   BanListEntry,
   JobPosting,
+  AdapterProgress,
 } from '../src/shared/ipc-types'
 
 contextBridge.exposeInMainWorld('api', {
@@ -151,8 +152,12 @@ contextBridge.exposeInMainWorld('api', {
   },
 
   // ── Jobs ───────────────────────────────────────────────────────────────────
-  runScrape() {
-    return ipcRenderer.invoke('jobs:run-scrape')
+  listAdapters() {
+    return ipcRenderer.invoke('jobs:list-adapters')
+  },
+
+  runScrape(adapterIds?: string[]) {
+    return ipcRenderer.invoke('jobs:run-scrape', adapterIds)
   },
 
   commitScrape(): Promise<void> {
@@ -229,5 +234,9 @@ contextBridge.exposeInMainWorld('api', {
 
   onAffinityUpdated(cb: (postings: JobPosting[]) => void): void {
     ipcRenderer.on('jobs:affinity-updated', (_event, postings: JobPosting[]) => cb(postings))
+  },
+
+  onAdapterProgress(cb: (p: AdapterProgress) => void): void {
+    ipcRenderer.on('jobs:adapter-progress', (_event, p: AdapterProgress) => cb(p))
   },
 } satisfies ElectronAPI)

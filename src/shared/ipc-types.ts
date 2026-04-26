@@ -130,6 +130,20 @@ export interface ScrapeSummary {
   keyword_filtered: number
 }
 
+export interface AdapterInfo {
+  id: string
+  name: string
+  description: string
+  available: boolean
+}
+
+export interface AdapterProgress {
+  adapterId: string
+  status: 'running' | 'done' | 'error'
+  fetched?: number
+  error?: string
+}
+
 // ─── Search terms ─────────────────────────────────────────────────────────────
 
 export interface SearchTerm {
@@ -283,7 +297,8 @@ export interface ElectronAPI {
   previewBanMatch(type: 'company' | 'domain', value: string): Promise<number>
 
   // Jobs
-  runScrape(): Promise<ScrapeSummary>
+  listAdapters(): Promise<AdapterInfo[]>
+  runScrape(adapterIds?: string[]): Promise<ScrapeSummary>
   commitScrape(): Promise<void>
   discardScrape(): Promise<void>
   getPostings(): Promise<JobPosting[]>
@@ -310,4 +325,5 @@ export interface ElectronAPI {
   // Events
   onScrapingCommitted(cb: () => void): void
   onAffinityUpdated(cb: (postings: JobPosting[]) => void): void
+  onAdapterProgress(cb: (p: AdapterProgress) => void): void
 }

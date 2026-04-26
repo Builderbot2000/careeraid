@@ -1,4 +1,4 @@
-import { chromium, type Browser } from 'playwright'
+import { chromium, type Browser, type ElementHandle, type Page } from 'playwright'
 import { BaseAdapter, type JobPosting, type SearchFilters, type Seniority } from './base'
 
 const SOURCE = 'linkedin'
@@ -14,7 +14,7 @@ const MAX_CONSECUTIVE_FAILS = 5
 // ─── Selectors ────────────────────────────────────────────────────────────────
 // Centralised here so they are easy to update when LinkedIn's DOM changes.
 
-const SELECTORS = {
+export const SELECTORS = {
   // Search results list (public / guest page)
   resultsList: 'ul.jobs-search__results-list',
   resultItem: 'ul.jobs-search__results-list > li',
@@ -33,7 +33,7 @@ const SELECTORS = {
 // Used for tech_stack extraction from raw_text. Ordered longest-first so that
 // "Next.js" is matched before "JS" when both appear in a description.
 
-const KNOWN_TECH: string[] = [
+export const KNOWN_TECH: string[] = [
   'TypeScript', 'JavaScript', 'Python', 'Ruby', 'Kotlin', 'Swift',
   'Scala', 'Clojure', 'Elixir', 'Haskell', 'C++', 'C#', '.NET',
   'Java', 'Rust', 'Go', 'PHP',
@@ -54,7 +54,7 @@ const KNOWN_TECH: string[] = [
 
 // ─── URL helpers ──────────────────────────────────────────────────────────────
 
-function buildSearchUrl(term: string, filters: SearchFilters, start: number): string {
+export function buildSearchUrl(term: string, filters: SearchFilters, start: number): string {
   const params = new URLSearchParams()
   if (term) params.set('keywords', term)
   if (filters.location) params.set('location', filters.location)
@@ -68,7 +68,7 @@ function buildSearchUrl(term: string, filters: SearchFilters, start: number): st
  * canonical path (`https://www.linkedin.com/jobs/view/<id>/`) rather than one
  * decorated with tracking tokens.
  */
-function cleanJobUrl(href: string): string {
+export function cleanJobUrl(href: string): string {
   try {
     const base = href.startsWith('/') ? 'https://www.linkedin.com' : undefined
     const u = new URL(href, base)
@@ -80,7 +80,7 @@ function cleanJobUrl(href: string): string {
 
 // ─── Parsing helpers ──────────────────────────────────────────────────────────
 
-function parsePostedAt(datetimeAttr: string | null, textContent: string): string | null {
+export function parsePostedAt(datetimeAttr: string | null, textContent: string): string | null {
   // Prefer the machine-readable datetime attribute when present.
   if (datetimeAttr) {
     const d = new Date(datetimeAttr)
@@ -108,7 +108,7 @@ function parsePostedAt(datetimeAttr: string | null, textContent: string): string
   return d.toISOString().slice(0, 10)
 }
 
-function parseApplicantCount(text: string): number | null {
+export function parseApplicantCount(text: string): number | null {
   // "Over 200 applicants", "Be among the first 25 applicants", "1,234 applicants"
   const normalised = text.replace(/,/g, '')
   const m = normalised.match(/(\d+)\s+applicant/i)
@@ -118,7 +118,7 @@ function parseApplicantCount(text: string): number | null {
   return null
 }
 
-function extractYoe(text: string): { yoe_min: number | null; yoe_max: number | null } {
+export function extractYoe(text: string): { yoe_min: number | null; yoe_max: number | null } {
   // "5+ years", "5 or more years"
   const plus = text.match(/(\d+)\+\s*years?/i) ?? text.match(/(\d+)\s+or\s+more\s+years?/i)
   if (plus) return { yoe_min: parseInt(plus[1], 10), yoe_max: null }
@@ -134,7 +134,7 @@ function extractYoe(text: string): { yoe_min: number | null; yoe_max: number | n
   return { yoe_min: null, yoe_max: null }
 }
 
-function extractSeniority(title: string, rawText: string): Seniority {
+export function extractSeniority(title: string, rawText: string): Seniority {
   const combined = `${title} ${rawText}`.toLowerCase()
   if (/\bintern\b/.test(combined)) return 'intern'
   if (/\bjunior\b|\bentry[\s-]level\b|\bjr\.?\b/.test(combined)) return 'junior'
@@ -144,7 +144,7 @@ function extractSeniority(title: string, rawText: string): Seniority {
   return 'any'
 }
 
-function extractTechStack(text: string): string[] {
+export function extractTechStack(text: string): string[] {
   const found: string[] = []
   for (const tech of KNOWN_TECH) {
     // Build a word-boundary–aware pattern. Allow internal dots (e.g. "Node.js").
@@ -155,19 +155,70 @@ function extractTechStack(text: string): string[] {
   return found
 }
 
+// ─── DOM parsers (exported for integration testing) ───────────────────────────
+
+export interface ParsedCard {
+  href: string
+  title: string
+  company: string
+  location: string
+  posted_at: string | null
+}
+
+/** Returns null when required card fields (href, title, company) are missing. */
+export async function parseCard(card: ElementHandle): Promise<ParsedCard | null> {
+  const linkEl     = await card.$(SELECTORS.cardLink)
+  const titleEl    = await card.$(SELECTORS.cardTitle)
+  const companyEl  = await card.$(SELECTORS.cardCompany)
+  const locationEl = await card.$(SELECTORS.cardLocation)
+  const timeEl     = await card.$(SELECTORS.cardPostedAt)
+
+  const href    = await linkEl?.getAttribute('href') ?? null
+  const title   = (await titleEl?.textContent())?.trim() ?? null
+  const company = (await companyEl?.textContent())?.trim() ?? null
+  const location = (await locationEl?.textContent())?.trim() ?? ''
+
+  const dateAttr = await timeEl?.getAttribute('datetime') ?? null
+  const dateText = (await timeEl?.textContent())?.trim() ?? ''
+  const posted_at = parsePostedAt(dateAttr, dateText)
+
+  if (!href || !title || !company) return null
+  return { href, title, company, location, posted_at }
+}
+
+export interface ParsedDetail {
+  raw_text: string | null
+  applicant_count: number | null
+}
+
+export async function parseDetail(page: Page): Promise<ParsedDetail> {
+  const descEl =
+    (await page.$(SELECTORS.detailDescription)) ??
+    (await page.$(SELECTORS.detailDescriptionFallback))
+  const raw_text = descEl ? (await descEl.innerText()).trim() : null
+
+  const appEl = await page.$(SELECTORS.detailApplicantCount)
+  const appText = (await appEl?.textContent())?.trim() ?? null
+  const applicant_count = appText ? parseApplicantCount(appText) : null
+
+  return { raw_text, applicant_count }
+}
+
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 export class LinkedInAdapter extends BaseAdapter {
+  override readonly id = 'linkedin'
   override readonly delayMs = 3000
   override readonly availableSignals = new Set(['recency', 'applicant_count'])
 
   override async search(
     term: string,
     filters: SearchFilters,
+    onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
     const browser = await chromium.launch({ headless: true })
     try {
-      return await this._scrape(browser, term, filters)
+      return await this._scrape(browser, term, filters, onPosting)
     } finally {
       await browser.close()
     }
@@ -177,6 +228,7 @@ export class LinkedInAdapter extends BaseAdapter {
     browser: Browser,
     term: string,
     filters: SearchFilters,
+    onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
     const searchPage = await browser.newPage()
     const detailPage = await browser.newPage()
@@ -207,26 +259,13 @@ export class LinkedInAdapter extends BaseAdapter {
 
           // ── Card-level fields ──────────────────────────────────────────────
 
-          const linkEl    = await card.$(SELECTORS.cardLink)
-          const titleEl   = await card.$(SELECTORS.cardTitle)
-          const companyEl = await card.$(SELECTORS.cardCompany)
-          const locationEl = await card.$(SELECTORS.cardLocation)
-          const timeEl    = await card.$(SELECTORS.cardPostedAt)
-
-          const href    = await linkEl?.getAttribute('href') ?? null
-          const title   = (await titleEl?.textContent())?.trim() ?? null
-          const company = (await companyEl?.textContent())?.trim() ?? null
-          const location = (await locationEl?.textContent())?.trim() ?? ''
-
-          const dateAttr = await timeEl?.getAttribute('datetime') ?? null
-          const dateText = (await timeEl?.textContent())?.trim() ?? ''
-          const posted_at = parsePostedAt(dateAttr, dateText)
-
-          if (!href || !title || !company) {
+          const parsed = await parseCard(card)
+          if (!parsed) {
             consecutiveFails++
             continue
           }
 
+          const { href, title, company, location, posted_at } = parsed
           const jobUrl = cleanJobUrl(href)
 
           // ── Detail page: raw_text + applicant_count ────────────────────────
@@ -238,15 +277,9 @@ export class LinkedInAdapter extends BaseAdapter {
 
           try {
             await detailPage.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-
-            const descEl =
-              (await detailPage.$(SELECTORS.detailDescription)) ??
-              (await detailPage.$(SELECTORS.detailDescriptionFallback))
-            raw_text = descEl ? (await descEl.innerText()).trim() : null
-
-            const appEl = await detailPage.$(SELECTORS.detailApplicantCount)
-            const appText = (await appEl?.textContent())?.trim() ?? null
-            if (appText) applicant_count = parseApplicantCount(appText)
+            const detail = await parseDetail(detailPage)
+            raw_text = detail.raw_text
+            applicant_count = detail.applicant_count
           } catch {
             // Detail fetch failed — continue with card-level data only, not a
             // hard parse failure.
@@ -278,10 +311,12 @@ export class LinkedInAdapter extends BaseAdapter {
             affinity_score: null,
             affinity_skipped: false,
             affinity_scored_at: null,
+            affinity_reasoning: null,
             first_response_at: null,
             last_seen_at: now,
           })
 
+          onPosting?.()
           consecutiveFails = 0
         }
 

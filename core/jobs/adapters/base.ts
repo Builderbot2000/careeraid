@@ -94,8 +94,9 @@ export interface SearchFilters {
 }
 
 export abstract class BaseAdapter {
+  abstract readonly id: string
   readonly delayMs: number = 3000
   readonly availableSignals: Set<string> = new Set()
 
-  abstract search(term: string, filters: SearchFilters): Promise<Omit<JobPosting, 'id'>[]>
+  abstract search(term: string, filters: SearchFilters, onPosting?: () => void): Promise<Omit<JobPosting, 'id'>[]>
 }

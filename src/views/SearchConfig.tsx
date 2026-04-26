@@ -4,10 +4,62 @@ import type {
     SearchTerm,
     BanListEntry,
     SearchConfigRow,
+    AdapterInfo,
+    AdapterProgress,
 } from '../shared/ipc-types'
 
 type ScrapeState = 'idle' | 'running' | 'pending_commit' | 'error'
 type Tab = 'intent' | 'filters' | 'banlist'
+
+// ─── Adapter progress badge ───────────────────────────────────────────────────
+
+function AdapterStatusBadge({
+    progress,
+    available,
+}: {
+    progress?: AdapterProgress
+    available: boolean
+}): React.ReactElement | null {
+    if (!available) {
+        return <span style={{ fontSize: '0.75rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>Unavailable</span>
+    }
+    if (!progress) return null
+    if (progress.status === 'running') {
+        return (
+            <span style={{ fontSize: '0.75rem', color: '#4dabf7', whiteSpace: 'nowrap' }}>
+                {progress.fetched != null && progress.fetched > 0
+                    ? `Running… (${progress.fetched})`
+                    : 'Running…'}
+            </span>
+        )
+    }
+    if (progress.status === 'done') {
+        return (
+            <span style={{ fontSize: '0.75rem', color: '#16a34a', whiteSpace: 'nowrap' }}>
+                ✓ {progress.fetched} fetched
+            </span>
+        )
+    }
+    if (progress.status === 'error') {
+        return (
+            <span
+                style={{
+                    fontSize: '0.75rem',
+                    color: '#fa5252',
+                    whiteSpace: 'nowrap',
+                    maxWidth: '160px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: 'inline-block',
+                }}
+                title={progress.error}
+            >
+                ✗ Error
+            </span>
+        )
+    }
+    return null
+}
 
 // ─── Sub-section: Intent & Terms ─────────────────────────────────────────────
 
@@ -20,12 +72,22 @@ function IntentTab(): React.ReactElement {
     const [summary, setSummary] = useState<ScrapeSummary | null>(null)
     const [errorMsg, setErrorMsg] = useState<string | null>(null)
     const [committing, setCommitting] = useState(false)
+    const [adapters, setAdapters] = useState<AdapterInfo[]>([])
+    const [selectedAdapters, setSelectedAdapters] = useState<Set<string>>(new Set())
+    const [adapterProgress, setAdapterProgress] = useState<Record<string, AdapterProgress>>({})
     const intentRef = useRef(intent)
     intentRef.current = intent
 
     useEffect(() => {
         window.api.getSearchConfig().then((cfg) => setIntent(cfg.intent ?? ''))
         window.api.getSearchTerms().then(setTerms)
+        window.api.listAdapters().then((list) => {
+            setAdapters(list)
+            setSelectedAdapters(new Set(list.filter((a) => a.available).map((a) => a.id)))
+        })
+        window.api.onAdapterProgress((p) => {
+            setAdapterProgress((prev) => ({ ...prev, [p.adapterId]: p }))
+        })
     }, [])
 
     function handleIntentBlur(): void {
@@ -66,8 +128,9 @@ function IntentTab(): React.ReactElement {
         setScrapeState('running')
         setErrorMsg(null)
         setSummary(null)
+        setAdapterProgress({})
         try {
-            const result = await window.api.runScrape()
+            const result = await window.api.runScrape(Array.from(selectedAdapters))
             setSummary(result)
             setScrapeState('pending_commit')
         } catch (err) {
@@ -242,32 +305,63 @@ function IntentTab(): React.ReactElement {
             {/* Adapter + scrape */}
             <section>
                 <h3 style={{ marginTop: 0, marginBottom: '12px', fontSize: '1rem' }}>Run Scrape</h3>
-                <div
-                    style={{
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        padding: '16px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: '16px',
-                    }}
-                >
-                    <div>
-                        <div style={{ fontWeight: 600 }}>Mock Adapter</div>
-                        <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                            Returns hardcoded sample postings — for development and testing
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+                    {adapters.map((adapter) => (
+                        <div
+                            key={adapter.id}
+                            style={{
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                padding: '12px 16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                opacity: adapter.available ? 1 : 0.5,
+                            }}
+                        >
+                            <input
+                                type="checkbox"
+                                checked={selectedAdapters.has(adapter.id)}
+                                disabled={
+                                    !adapter.available ||
+                                    scrapeState === 'running' ||
+                                    scrapeState === 'pending_commit'
+                                }
+                                onChange={(e) => {
+                                    setSelectedAdapters((prev) => {
+                                        const next = new Set(prev)
+                                        if (e.target.checked) next.add(adapter.id)
+                                        else next.delete(adapter.id)
+                                        return next
+                                    })
+                                }}
+                                style={{ cursor: adapter.available ? 'pointer' : 'not-allowed', flexShrink: 0 }}
+                            />
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600 }}>{adapter.name}</div>
+                                <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
+                                    {adapter.description}
+                                </div>
+                            </div>
+                            <AdapterStatusBadge
+                                progress={adapterProgress[adapter.id]}
+                                available={adapter.available}
+                            />
                         </div>
-                    </div>
-                    <button
-                        data-testid="search-run-scrape-btn"
-                        onClick={handleRunScrape}
-                        disabled={scrapeState === 'running' || scrapeState === 'pending_commit'}
-                        style={{ padding: '8px 16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                    >
-                        {scrapeState === 'running' ? 'Running…' : 'Run Scrape'}
-                    </button>
+                    ))}
                 </div>
+                <button
+                    data-testid="search-run-scrape-btn"
+                    onClick={handleRunScrape}
+                    disabled={
+                        scrapeState === 'running' ||
+                        scrapeState === 'pending_commit' ||
+                        selectedAdapters.size === 0
+                    }
+                    style={{ padding: '8px 16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                    {scrapeState === 'running' ? 'Running…' : 'Run Scrape'}
+                </button>
 
                 {scrapeState === 'error' && errorMsg && (
                     <div data-testid="search-error" style={{ marginTop: '12px', color: 'crimson', fontSize: '0.85rem' }}>
