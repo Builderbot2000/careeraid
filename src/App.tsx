@@ -58,7 +58,7 @@ export default function App(): React.ReactElement {
     return (
         <div className="app-shell">
             <nav className="sidebar">
-                <div className="sidebar-title">Career Index</div>
+                <div className="sidebar-title">careeraid</div>
                 {NAV.map((item) => {
                     const locked = isLocked(item)
                     return (
