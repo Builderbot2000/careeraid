@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import type { JobPosting, PostingStatus } from '../shared/ipc-types'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
 
 const TRACKER_STATUSES: PostingStatus[] = [
     'favorited',
@@ -11,6 +11,12 @@ const TRACKER_STATUSES: PostingStatus[] = [
     'rejected',
     'ghosted',
 ]
+
+const NEXT_STATUS: Partial<Record<PostingStatus, PostingStatus>> = {
+    favorited: 'applied',
+    applied: 'interviewing',
+    interviewing: 'offer',
+}
 
 function formatDate(iso: string | null): string {
     if (!iso) return '—'
@@ -156,24 +162,35 @@ export default function Tracker(): React.ReactElement {
                                 {formatDate(posting.last_seen_at)}
                             </td>
                             <td style={{ padding: '10px 12px 10px 0' }}>
-                                <select
-                                    data-testid={`tracker-status-select-${posting.id}`}
-                                    value={posting.status}
-                                    onChange={(e) => handleStatusChange(posting.id, e.target.value as PostingStatus)}
-                                    style={{
-                                        fontSize: '0.8rem',
-                                        padding: '3px 6px',
-                                        borderRadius: '4px',
-                                        border: '1px solid #d1d5db',
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    {TRACKER_STATUSES.map((s) => (
-                                        <option key={s} value={s} style={{ textTransform: 'capitalize' }}>
-                                            {s}
-                                        </option>
-                                    ))}
-                                </select>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <select
+                                        data-testid={`tracker-status-select-${posting.id}`}
+                                        value={posting.status}
+                                        onChange={(e) => handleStatusChange(posting.id, e.target.value as PostingStatus)}
+                                        style={{
+                                            fontSize: '0.8rem',
+                                            padding: '3px 6px',
+                                            borderRadius: '4px',
+                                            border: '1px solid #d1d5db',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        {TRACKER_STATUSES.map((s) => (
+                                            <option key={s} value={s} style={{ textTransform: 'capitalize' }}>
+                                                {s}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {NEXT_STATUS[posting.status] && (
+                                        <button
+                                            onClick={() => handleStatusChange(posting.id, NEXT_STATUS[posting.status]!)}
+                                            style={{ fontSize: '0.7rem', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                            title={`Advance to ${NEXT_STATUS[posting.status]}`}
+                                        >
+                                            → {NEXT_STATUS[posting.status]}
+                                        </button>
+                                    )}
+                                </div>
                             </td>
                             <td style={{ padding: '10px 0' }}>
                                 <button

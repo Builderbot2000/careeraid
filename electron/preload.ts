@@ -10,6 +10,7 @@ import type {
   SearchConfigRow,
   SearchTerm,
   BanListEntry,
+  JobPosting,
 } from '../src/shared/ipc-types'
 
 contextBridge.exposeInMainWorld('api', {
@@ -75,6 +76,10 @@ contextBridge.exposeInMainWorld('api', {
 
   importProfileMarkdown(): Promise<{ added: number; skipped: number } | null> {
     return ipcRenderer.invoke('profile:import')
+  },
+
+  importProfileFromResumePdf(): Promise<{ added: number; entries: unknown[] } | null> {
+    return ipcRenderer.invoke('profile:import-resume-pdf')
   },
 
   // ── Resume ────────────────────────────────────────────────────────────────
@@ -166,6 +171,10 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('jobs:update-status', { id, status })
   },
 
+  deletePostings(ids: string[]): Promise<void> {
+    return ipcRenderer.invoke('jobs:delete-postings', { ids })
+  },
+
   // ── Tracker ────────────────────────────────────────────────────────────────
   getTrackerPostings() {
     return ipcRenderer.invoke('tracker:get-postings')
@@ -216,5 +225,9 @@ contextBridge.exposeInMainWorld('api', {
   // ── Events ─────────────────────────────────────────────────────────────────
   onScrapingCommitted(cb: () => void): void {
     ipcRenderer.on('jobs:scrape-committed', () => cb())
+  },
+
+  onAffinityUpdated(cb: (postings: JobPosting[]) => void): void {
+    ipcRenderer.on('jobs:affinity-updated', (_event, postings: JobPosting[]) => cb(postings))
   },
 } satisfies ElectronAPI)

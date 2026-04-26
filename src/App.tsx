@@ -18,8 +18,8 @@ interface NavItem {
 
 const NAV: NavItem[] = [
     { id: 'profile', label: 'Profile' },
-    { id: 'search', label: 'Search Config' },
-    { id: 'jobs', label: 'Job Board' },
+    { id: 'search', label: 'Search' },
+    { id: 'jobs', label: 'Jobs' },
     { id: 'resume', label: 'Resume', lockedBy: ['xelatex', 'claudeApiKey', 'profileEmpty'] },
     { id: 'tracker', label: 'Tracker' },
     { id: 'analytics', label: 'Analytics' },

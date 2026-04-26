@@ -66,6 +66,7 @@ export default function Profile(): React.ReactElement {
     const [form, setForm] = useState<FormState>(blankForm())
     const [formError, setFormError] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
+    const [pdfImporting, setPdfImporting] = useState(false)
     const [yoeInput, setYoeInput] = useState('')
     const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
@@ -189,6 +190,21 @@ export default function Profile(): React.ReactElement {
         if (result) {
             flash(`Import complete — ${result.added} added, ${result.skipped} skipped.`)
             await load()
+        }
+    }
+
+    async function handleImportResumePdf(): Promise<void> {
+        setPdfImporting(true)
+        try {
+            const result = await window.api.importProfileFromResumePdf()
+            if (result) {
+                flash(`Resume imported — ${result.added} ${result.added === 1 ? 'entry' : 'entries'} added.`)
+                await load()
+            }
+        } catch (e) {
+            flash(`Resume import failed: ${String(e)}`)
+        } finally {
+            setPdfImporting(false)
         }
     }
 
@@ -329,6 +345,15 @@ export default function Profile(): React.ReactElement {
                     <div style={{ display: 'flex', gap: 8, paddingBottom: 20 }}>
                         <button className="btn" onClick={handleExport}>Export Markdown</button>
                         <button className="btn" onClick={handleImport}>Import Markdown</button>
+                        <button
+                            data-testid="profile-import-pdf-btn"
+                            className="btn"
+                            onClick={handleImportResumePdf}
+                            disabled={pdfImporting}
+                            title="Upload a resume PDF and let AI populate your profile"
+                        >
+                            {pdfImporting ? 'Importing…' : 'Import from Resume PDF'}
+                        </button>
                     </div>
                 </div>
                 {statusMsg && (

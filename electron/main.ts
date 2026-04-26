@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell, dialog, session } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, dialog, session, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { randomUUID } from 'crypto'
@@ -26,6 +26,7 @@ import {
   importFromMarkdown,
   countWords,
 } from '../core/profile/repository'
+import { importProfileFromResumePdf } from '../core/profile/resumeImporter'
 import { CreateProfileEntrySchema, UpdateProfileEntrySchema } from '../core/profile/models'
 import { tailorResume } from '../core/resume/agent'
 import { renderTex } from '../core/resume/renderer'
@@ -35,10 +36,10 @@ import type { Application } from '../src/shared/ipc-types'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
-import { getRankedPostings } from '../core/jobs/ranker'
+import { getFilteredRankedPostings, getRankedPostings } from '../core/jobs/ranker'
 import { generateSearchTerms } from '../core/jobs/searchTermGen'
 import { writeLLMUsage } from '../core/jobs/llmUsage'
-import { getTrackerPostings, updatePostingStatus } from '../core/tracker/repository'
+import { getTrackerPostings, updatePostingStatus, deletePostings } from '../core/tracker/repository'
 import {
   getFunnelSummary,
   getBySource,
@@ -100,7 +101,7 @@ function applyCSP(): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' file:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self' data:; frame-src file:",
+          "default-src 'self' file:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:; font-src 'self' data:; frame-src resume:",
         ],
       },
     })
@@ -326,6 +327,31 @@ function registerIpcHandlers(): void {
     return result
   })
 
+  ipcMain.handle('profile:import-resume-pdf', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog({
+      filters: [{ name: 'PDF Resume', extensions: ['pdf'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || !filePaths[0]) return null
+
+    const apiKey = getApiKey()
+    if (!apiKey) throw new Error('No API key stored — set one in Settings first')
+
+    const pdfBuffer = fs.readFileSync(filePaths[0])
+    const pdfBase64 = pdfBuffer.toString('base64')
+
+    const result = await importProfileFromResumePdf(apiKey, pdfBase64, getDb())
+    logger.info('Profile imported from resume PDF', { added: result.added })
+
+    // Update profileEmpty feature lock now that entries exist
+    if (result.added > 0) {
+      currentFeatureLocks.profileEmpty = false
+      mainWindow?.webContents.send('startup:feature-locks', { ...currentFeatureLocks })
+    }
+
+    return result
+  })
+
   // ─── Resume ───────────────────────────────────────────────────────────────
 
   ipcMain.handle(
@@ -354,6 +380,25 @@ function registerIpcHandlers(): void {
       const entries = getAllEntries(getDb())
       if (entries.length === 0) throw new Error('Profile is empty — add entries first')
 
+      // Resolve xelatex early — before spending API tokens
+      const settings = getSettings()
+      const xelatexBin =
+        settings.tex_binary_path ??
+        [
+          '/usr/bin/xelatex',
+          '/usr/local/bin/xelatex',
+          'C:\\texlive\\2024\\bin\\windows\\xelatex.exe',
+          'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe',
+        ].find((p) => fs.existsSync(p)) ??
+        null
+
+      if (!xelatexBin) {
+        throw new Error(
+          'xelatex is not installed. Install TeX Live (Linux: sudo apt install texlive-xetex) ' +
+          'or set the binary path in Settings, then restart the app.',
+        )
+      }
+
       const resumeData = await tailorResume(
         key,
         entries,
@@ -369,17 +414,6 @@ function registerIpcHandlers(): void {
       const texPath = path.join(texDir, 'resume.tex')
 
       renderTex(templateName, resumeData, texPath)
-
-      const settings = getSettings()
-      const xelatexBin =
-        settings.tex_binary_path ??
-        [
-          '/usr/bin/xelatex',
-          '/usr/local/bin/xelatex',
-          'C:\\texlive\\2024\\bin\\windows\\xelatex.exe',
-          'C:\\Program Files\\MiKTeX\\miktex\\bin\\x64\\xelatex.exe',
-        ].find((p) => fs.existsSync(p)) ??
-        'xelatex'
 
       const outcome = await compileTex(texPath, xelatexBin)
       if (!outcome.success) {
@@ -666,6 +700,14 @@ function registerIpcHandlers(): void {
     commitScrape(getDb())
     mainWindow?.webContents.send('jobs:scrape-committed')
     logger.info('Scrape committed')
+    if (getApiKeyPresent()) {
+      const key = getApiKey()
+      if (key) {
+        getRankedPostings(getDb(), key)
+          .then((postings) => mainWindow?.webContents.send('jobs:affinity-updated', postings))
+          .catch((err) => logger.error('Background affinity scoring failed', err))
+      }
+    }
   })
 
   ipcMain.handle('jobs:discard-scrape', () => {
@@ -674,12 +716,25 @@ function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('jobs:get-postings', () => {
-    const key = getApiKeyPresent() ? getApiKey() : null
-    return getRankedPostings(getDb(), key)
+    const postings = getFilteredRankedPostings(getDb())
+    // Trigger background scoring if there are unscored postings
+    if (getApiKeyPresent()) {
+      const key = getApiKey()
+      if (key && postings.some((p) => p.affinity_score === null && !p.affinity_skipped)) {
+        getRankedPostings(getDb(), key)
+          .then((scored) => mainWindow?.webContents.send('jobs:affinity-updated', scored))
+          .catch((err) => logger.error('Background affinity scoring failed', err))
+      }
+    }
+    return postings
   })
 
   ipcMain.handle('jobs:update-status', (_event, { id, status }: { id: string; status: string }) => {
     updatePostingStatus(getDb(), id, status as PostingStatus)
+  })
+
+  ipcMain.handle('jobs:delete-postings', (_event, { ids }: { ids: string[] }) => {
+    deletePostings(getDb(), ids)
   })
 
   // ─── Tracker ──────────────────────────────────────────────────────────────
@@ -810,6 +865,12 @@ function registerIpcHandlers(): void {
   })
 }
 
+// Must be called before app.ready — registers resume: as a standard secure scheme
+// so the sandboxed renderer can load it in iframes (file:// is blocked cross-path).
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'resume', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+])
+
 // On Linux without a Secret Service daemon (e.g. WSL, minimal desktops),
 // force safeStorage into "basic" mode so encryption is always available.
 if (process.platform === 'linux') {
@@ -834,6 +895,13 @@ app.whenReady().then(async () => {
       'are harmless noise from the notification/tray layer; they do not affect app function.',
     )
   }
+
+  // Serve compiled PDFs through resume: so the sandboxed iframe can load them.
+  protocol.handle('resume', (request) => {
+    const filePath = decodeURIComponent(new URL(request.url).pathname)
+    const absolute = process.platform === 'win32' ? filePath.slice(1) : filePath
+    return net.fetch(`file://${absolute}`)
+  })
 
   applyCSP()
   registerIpcHandlers()

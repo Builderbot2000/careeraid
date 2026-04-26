@@ -16,6 +16,12 @@ export function getTrackerPostings(db: Database.Database): JobPosting[] {
   return rows.map(rowToPosting)
 }
 
+export function deletePostings(db: Database.Database, ids: string[]): void {
+  if (ids.length === 0) return
+  const placeholders = ids.map(() => '?').join(',')
+  db.prepare(`DELETE FROM job_postings WHERE id IN (${placeholders})`).run(...ids)
+}
+
 /**
  * Updates a posting's status. Sets first_response_at when first transitioning
  * out of 'applied' (interviewing, offer, rejected, ghosted).

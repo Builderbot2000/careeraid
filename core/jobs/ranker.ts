@@ -120,19 +120,20 @@ function compositeScore(
   return weightTotal > 0 ? weightedSum / weightTotal : 0
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── Shared config loader ────────────────────────────────────────────────────
 
-export async function getRankedPostings(
-  db: Database.Database,
-  apiKey: string | null,
-): Promise<JobPosting[]> {
-  // Load all postings with raw_text
-  const rows = db
-    .prepare(`SELECT * FROM job_postings WHERE raw_text IS NOT NULL`)
-    .all() as JobPostingRow[]
-  const all = rows.map(rowToPosting)
+type SearchConfig = {
+  required_keywords: string[]
+  excluded_keywords: string[]
+  keyword_match_fields: string[]
+  excluded_stack: string[]
+}
 
-  // Load search config
+function loadConfig(db: Database.Database): {
+  config: SearchConfig
+  weights: Record<string, number>
+  userYoe: number | null
+} {
   const configRow = db
     .prepare(
       `SELECT required_keywords, excluded_keywords, keyword_match_fields,
@@ -158,9 +159,7 @@ export async function getRankedPostings(
       : ['title', 'tech_stack'],
     excluded_stack: parseJsonArray(configRow?.excluded_stack),
   }
-  const weights = parseWeights(configRow?.ranking_weights)
 
-  // Load user YOE
   const userYoe =
     (
       db
@@ -168,34 +167,54 @@ export async function getRankedPostings(
         .get() as { yoe: number | null } | undefined
     )?.yoe ?? null
 
-  // Stage 1 — hard filters
-  const filtered = applyHardFilters(all, config, userYoe)
+  return { config, weights: parseWeights(configRow?.ranking_weights), userYoe }
+}
 
-  // Stage 2 — affinity scoring (only postings without a valid cached score)
-  if (apiKey) {
-    const needsScoring = filtered.filter((p) => p.affinity_score === null && !p.affinity_skipped)
-    if (needsScoring.length > 0) {
-      await scorePostings(db, apiKey, needsScoring)
-      // Reload scored postings from DB to pick up updated scores
-      const rescoredIds = [...new Set(needsScoring.map((p) => p.id))]
-      const placeholders = rescoredIds.map(() => '?').join(',')
-      const freshRows = db
-        .prepare(`SELECT * FROM job_postings WHERE id IN (${placeholders})`)
-        .all(rescoredIds) as JobPostingRow[]
-      const freshMap = new Map(freshRows.map((r) => [r.id, rowToPosting(r)]))
-      for (let i = 0; i < filtered.length; i++) {
-        if (freshMap.has(filtered[i].id)) filtered[i] = freshMap.get(filtered[i].id)!
-      }
-    }
-  }
-
-  // Stage 3 — composite score + sort descending
+function rankFiltered(filtered: JobPosting[], weights: Record<string, number>): JobPosting[] {
   const now = Date.now()
-  const ranked = filtered
+  return filtered
     .map((p) => ({ posting: p, score: compositeScore(p, weights, now) }))
     .sort((a, b) => b.score - a.score)
     .map((x) => x.posting)
+}
 
-  return ranked
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/** Fast synchronous path — returns postings with cached scores only, no API calls. */
+export function getFilteredRankedPostings(db: Database.Database): JobPosting[] {
+  const rows = db
+    .prepare(`SELECT * FROM job_postings WHERE raw_text IS NOT NULL`)
+    .all() as JobPostingRow[]
+  const { config, weights, userYoe } = loadConfig(db)
+  const filtered = applyHardFilters(rows.map(rowToPosting), config, userYoe)
+  return rankFiltered(filtered, weights)
+}
+
+/** Slow path — runs affinity scoring via Claude then returns fully-ranked postings. */
+export async function getRankedPostings(
+  db: Database.Database,
+  apiKey: string,
+): Promise<JobPosting[]> {
+  const rows = db
+    .prepare(`SELECT * FROM job_postings WHERE raw_text IS NOT NULL`)
+    .all() as JobPostingRow[]
+  const { config, weights, userYoe } = loadConfig(db)
+  const filtered = applyHardFilters(rows.map(rowToPosting), config, userYoe)
+
+  const needsScoring = filtered.filter((p) => p.affinity_score === null && !p.affinity_skipped)
+  if (needsScoring.length > 0) {
+    await scorePostings(db, apiKey, needsScoring)
+    const rescoredIds = [...new Set(needsScoring.map((p) => p.id))]
+    const placeholders = rescoredIds.map(() => '?').join(',')
+    const freshRows = db
+      .prepare(`SELECT * FROM job_postings WHERE id IN (${placeholders})`)
+      .all(rescoredIds) as JobPostingRow[]
+    const freshMap = new Map(freshRows.map((r) => [r.id, rowToPosting(r)]))
+    for (let i = 0; i < filtered.length; i++) {
+      if (freshMap.has(filtered[i].id)) filtered[i] = freshMap.get(filtered[i].id)!
+    }
+  }
+
+  return rankFiltered(filtered, weights)
 }
 

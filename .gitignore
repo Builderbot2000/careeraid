@@ -14,3 +14,4 @@ dev-app-update.yml
 
 # Build artifacts
 release/
+misc/

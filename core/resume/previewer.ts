@@ -1,10 +1,10 @@
-import { pathToFileURL } from 'url'
-
 /**
- * Converts an absolute PDF path to a file:// URL string safe for use as an
- * iframe src in the renderer.  The renderer never calls Node APIs directly —
- * it receives this string over IPC.
+ * Converts an absolute PDF path to a resume:// URL for iframe display in the
+ * sandboxed renderer. The main process serves resume:// via protocol.handle,
+ * which forwards to net.fetch(file://...) — bypassing Chromium's cross-path
+ * file:// restriction that would otherwise blank the iframe.
  */
 export function pdfPathToUrl(absolutePdfPath: string): string {
-  return pathToFileURL(absolutePdfPath).href
+  const encoded = absolutePdfPath.split(/[\\/]/).map(encodeURIComponent).join('/')
+  return `resume://local/${encoded}`
 }

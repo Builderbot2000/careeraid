@@ -33,12 +33,10 @@ export const test = base.extend<AppFixtures>({
         '--disable-renderer-backgrounding',
         path.join(__dirname, '../../../out/main/index.js'),
       ],
-      env: {
-        ...process.env,
-        NODE_ENV: 'test',
-        CAREERAID_TEST: '1',
-        ELECTRON_USER_DATA: tmpUserData,
-      },
+      env: Object.fromEntries(
+        Object.entries({ ...process.env, NODE_ENV: 'test', CAREERAID_TEST: '1', ELECTRON_USER_DATA: tmpUserData })
+          .filter(([k, v]) => k !== 'ELECTRON_RUN_AS_NODE' && v !== undefined) as [string, string][]
+      ),
     })
 
     await use(electronApp)

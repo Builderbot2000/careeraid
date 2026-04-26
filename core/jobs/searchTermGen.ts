@@ -57,14 +57,15 @@ export async function generateSearchTerms(
   })
 
   // Parse response
-  const text = response.content.find((b) => b.type === 'text')?.text ?? ''
+  const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
   let termSets: RawTermSet[]
   try {
     const parsed = JSON.parse(text)
     if (!Array.isArray(parsed)) throw new Error('Expected array')
     termSets = parsed as RawTermSet[]
   } catch {
-    throw new Error(`Failed to parse search term response: ${text.slice(0, 200)}`)
+    throw new Error(`Failed to parse search term response: ${raw.slice(0, 200)}`)
   }
 
   // Delete existing llm_generated terms and replace

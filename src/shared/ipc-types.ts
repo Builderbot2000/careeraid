@@ -253,6 +253,7 @@ export interface ElectronAPI {
   setUserYoe(yoe: number | null): Promise<void>
   exportProfileMarkdown(): Promise<string | null>
   importProfileMarkdown(): Promise<{ added: number; skipped: number } | null>
+  importProfileFromResumePdf(): Promise<{ added: number; entries: ProfileEntry[] } | null>
 
   // Resume
   tailorResume(
@@ -287,6 +288,7 @@ export interface ElectronAPI {
   discardScrape(): Promise<void>
   getPostings(): Promise<JobPosting[]>
   updatePostingStatus(id: string, status: PostingStatus): Promise<void>
+  deletePostings(ids: string[]): Promise<void>
 
   // Tracker
   getTrackerPostings(): Promise<JobPosting[]>
@@ -307,4 +309,5 @@ export interface ElectronAPI {
 
   // Events
   onScrapingCommitted(cb: () => void): void
+  onAffinityUpdated(cb: (postings: JobPosting[]) => void): void
 }

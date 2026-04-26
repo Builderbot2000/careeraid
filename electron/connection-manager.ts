@@ -1,3 +1,4 @@
+
 import { EventEmitter } from 'events'
 import { initDb, getDb, closeDb } from '../db/database'
 

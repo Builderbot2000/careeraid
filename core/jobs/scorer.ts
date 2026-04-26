@@ -60,10 +60,13 @@ export async function scorePostings(
   if (candidates.length === 0) return
 
   const settings = db
-    .prepare('SELECT affinity_skip_threshold, affinity_token_budget FROM settings WHERE id = 1')
-    .get() as { affinity_skip_threshold: number; affinity_token_budget: number }
+    .prepare('SELECT affinity_token_budget FROM settings WHERE id = 1')
+    .get() as { affinity_token_budget: number }
+  const config = db
+    .prepare('SELECT affinity_skip_threshold FROM search_config WHERE id = 1')
+    .get() as { affinity_skip_threshold: number } | undefined
 
-  const skipThreshold = settings.affinity_skip_threshold ?? 15
+  const skipThreshold = config?.affinity_skip_threshold ?? 15
   const tokenBudget = settings.affinity_token_budget ?? 80_000
 
   // Skip threshold: mark all skipped if candidate pool is small
@@ -130,7 +133,8 @@ export async function scorePostings(
         posting_id: null,
       })
 
-      const text = response.content.find((b) => b.type === 'text')?.text ?? ''
+      const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
+      const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
       const parsed = JSON.parse(text)
       if (!Array.isArray(parsed)) throw new Error('Expected array')
       items = parsed

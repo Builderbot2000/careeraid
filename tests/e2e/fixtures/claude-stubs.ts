@@ -44,6 +44,35 @@ export const STUB_RESUME_DATA = {
   credentials: ['AWS Certified Solutions Architect'],
 }
 
+// ─── Resume PDF import stub ───────────────────────────────────────────────────
+
+export const STUB_PDF_IMPORT_ENTRIES: Omit<import('../../../src/shared/ipc-types').ProfileEntry, 'id' | 'created_at'>[] = [
+  {
+    type: 'experience',
+    title: 'Senior Software Engineer at Acme Corp',
+    content: 'Led backend development using TypeScript and PostgreSQL. Designed high-throughput data pipelines processing 1M events/day.',
+    tags: ['typescript', 'postgresql', 'backend'],
+    start_date: '2021-01-01',
+    end_date: null,
+  },
+  {
+    type: 'education',
+    title: 'B.Sc. Computer Science — State University',
+    content: 'Bachelor of Science in Computer Science. Graduated with honours.',
+    tags: ['computer science'],
+    start_date: '2014-09-01',
+    end_date: '2018-06-01',
+  },
+  {
+    type: 'skill',
+    title: 'Programming Languages',
+    content: 'Proficient in TypeScript, Go, and Python. Familiar with Rust.',
+    tags: ['typescript', 'go', 'python'],
+    start_date: null,
+    end_date: null,
+  },
+]
+
 // ─── Affinity scoring stub ────────────────────────────────────────────────────
 // Returns a scoring result for every posting ID passed in.
 // Callers should map their posting IDs over this to produce the response array.

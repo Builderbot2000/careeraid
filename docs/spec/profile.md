@@ -44,3 +44,17 @@ The profile is the sole source of content for resume generation; no other data s
 ## Tag Filtering
 
 - The profile view supports filtering entries by type tag to assist with managing a large profile.
+
+---
+
+## Resume PDF Import
+
+- A dedicated "Import from Resume PDF" button is available on the Profile view for testing and onboarding purposes.
+- The user selects a PDF file via the system file dialog; the file is read locally and never transmitted outside the Claude API call.
+- The app sends the PDF to the configured Claude AI model using the document message format and asks it to extract structured profile entries.
+- The AI response is parsed into typed profile entries (`experience`, `education`, `skill`, `credential`, `accomplishment`) and bulk-inserted into the profile.
+- A progress indicator is shown while the AI call is in-flight.
+- On success, a flash message reports the number of entries added and the entry list refreshes automatically.
+- If the API key is absent or the AI call fails, a descriptive error is shown and no entries are written.
+- Existing entries are preserved; the PDF import only adds new entries (no deduplication or replacement of existing ones).
+- This feature requires the Claude API key to be configured; the button is disabled when the key is absent.

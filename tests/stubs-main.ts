@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto'
 import path from 'path'
 import fs from 'fs'
 import { getDb } from '../db/database'
-import { STUB_SEARCH_TERMS, STUB_RESUME_DATA, stubAffinityScore } from '../tests/e2e/fixtures/claude-stubs'
+import { STUB_SEARCH_TERMS, STUB_RESUME_DATA, STUB_PDF_IMPORT_ENTRIES, stubAffinityScore } from '../tests/e2e/fixtures/claude-stubs'
 import type { SearchTerm } from '../src/shared/ipc-types'
 import { renderTex } from '../core/resume/renderer'
 import { compileTex } from '../core/resume/compiler'
@@ -17,7 +17,7 @@ import { pdfPathToUrl } from '../core/resume/previewer'
 import { app } from 'electron'
 import { runScrape } from '../core/jobs/aggregator'
 import { MockAdapter } from '../core/jobs/adapters/mock'
-import { getRankedPostings } from '../core/jobs/ranker'
+import { getFilteredRankedPostings } from '../core/jobs/ranker'
 
 export function registerTestStubs(): void {
   // ─── Scrape — add a small delay so the 'Running…' UI state is observable ────
@@ -88,7 +88,7 @@ export function registerTestStubs(): void {
 
     // Now delegate to the real ranking logic.
     // Since we've already stamped scores, the ranker won't call Claude.
-    return getRankedPostings(db, null)
+    return getFilteredRankedPostings(db)
   })
 
   // ─── Resume tailoring ───────────────────────────────────────────────────────
@@ -190,5 +190,24 @@ export function registerTestStubs(): void {
     const dest = path.join(tmpDir, `careeraid-test-export-${Date.now()}.json`)
     fs.writeFileSync(dest, JSON.stringify(payload, null, 2), 'utf-8')
     return dest
+  })
+
+  // ─── Resume PDF import stub ─────────────────────────────────────────────────
+  // Bypass file dialog + Claude call; insert deterministic fixture entries.
+  ipcMain.removeHandler('profile:import-resume-pdf')
+  ipcMain.handle('profile:import-resume-pdf', () => {
+    const db = getDb()
+    const now = new Date().toISOString()
+    const inserted = []
+    const stmt = db.prepare(
+      `INSERT INTO profile_entries (id, type, title, content, tags, start_date, end_date, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    for (const entry of STUB_PDF_IMPORT_ENTRIES) {
+      const id = randomUUID()
+      stmt.run(id, entry.type, entry.title, entry.content, JSON.stringify(entry.tags), entry.start_date, entry.end_date, now)
+      inserted.push({ ...entry, id, created_at: now })
+    }
+    return { added: inserted.length, entries: inserted }
   })
 }
