@@ -147,48 +147,61 @@ export async function runScrape(
   let dupes = 0
 
   for (const adapter of adapters) {
+    const termRows = db
+      .prepare('SELECT term FROM search_terms WHERE adapter_id = ? AND enabled = 1')
+      .all(adapter.id) as { term: string }[]
+    const searchTerms = termRows.length > 0 ? termRows.map((r) => r.term) : ['']
+
     onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
     let adapterFetched = 0
-    let postings: Awaited<ReturnType<typeof adapter.search>>
-    try {
-      postings = await adapter.search('', {}, () => {
-        adapterFetched++
-        onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
-      })
-    } catch (err) {
-      onProgress?.({
-        adapterId: adapter.id,
-        status: 'error',
-        error: err instanceof Error ? err.message : String(err),
-      })
-      continue
+    let hadError = false
+
+    for (const term of searchTerms) {
+      let postings: Awaited<ReturnType<typeof adapter.search>>
+      try {
+        postings = await adapter.search(term, {}, () => {
+          adapterFetched++
+          onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
+        })
+      } catch (err) {
+        onProgress?.({
+          adapterId: adapter.id,
+          status: 'error',
+          error: err instanceof Error ? err.message : String(err),
+        })
+        hadError = true
+        break
+      }
+      fetched += postings.length
+
+      for (const posting of postings) {
+        if (existingUrls.has(posting.url)) {
+          dupes++
+          continue
+        }
+
+        const ck = compositeKey(posting.company, posting.title, posting.posted_at)
+        if (existingComposites.has(ck)) {
+          dupes++
+          continue
+        }
+
+        // In-memory dedup against already-staged postings in this run
+        const alreadyStaged = results.some(
+          (r) => r.url === posting.url || compositeKey(r.company, r.title, r.posted_at) === ck,
+        )
+        if (alreadyStaged) {
+          dupes++
+          continue
+        }
+
+        // Aggregator assigns the canonical DB id
+        results.push({ ...posting, id: randomUUID() } as JobPosting)
+      }
     }
-    onProgress?.({ adapterId: adapter.id, status: 'done', fetched: postings.length })
-    fetched += postings.length
 
-    for (const posting of postings) {
-      if (existingUrls.has(posting.url)) {
-        dupes++
-        continue
-      }
-
-      const ck = compositeKey(posting.company, posting.title, posting.posted_at)
-      if (existingComposites.has(ck)) {
-        dupes++
-        continue
-      }
-
-      // In-memory dedup against already-staged postings in this run
-      const alreadyStaged = results.some(
-        (r) => r.url === posting.url || compositeKey(r.company, r.title, r.posted_at) === ck,
-      )
-      if (alreadyStaged) {
-        dupes++
-        continue
-      }
-
-      // Aggregator assigns the canonical DB id
-      results.push({ ...posting, id: randomUUID() } as JobPosting)
+    if (!hadError) {
+      onProgress?.({ adapterId: adapter.id, status: 'done', fetched: adapterFetched })
     }
   }
 
