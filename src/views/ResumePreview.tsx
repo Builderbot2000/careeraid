@@ -112,9 +112,10 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                 </label>
 
                 {/* Template selector */}
-                <label style={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                <label htmlFor="resume-template" style={{ fontWeight: 600, fontSize: '0.85rem' }}>
                     Template
                     <select
+                        id="resume-template"
                         value={template}
                         onChange={(e) => setTemplate(e.target.value)}
                         style={{ display: 'block', width: '100%', marginTop: '4px' }}
@@ -132,6 +133,19 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                 >
                     {status === 'loading' ? 'Tailoring…' : 'Tailor Resume'}
                 </button>
+
+                {status === 'success' && (
+                    <button
+                        onClick={() => {
+                            setStatus('idle')
+                            setPdfUrl(null)
+                            setCurrentApp(null)
+                        }}
+                        style={{ padding: '8px 16px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                        Re-tailor
+                    </button>
+                )}
 
                 {currentApp && postingId && initialPosting && !applied && (
                     <button
@@ -162,6 +176,7 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                             {applications.map((app) => (
                                 <li
                                     key={app.id}
+                                    data-testid="application-entry"
                                     onClick={() => handleSelectApplication(app)}
                                     style={{
                                         padding: '6px 8px',

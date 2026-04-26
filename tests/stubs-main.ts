@@ -65,7 +65,7 @@ export function registerTestStubs(): void {
 
     const total = (db.prepare("SELECT COUNT(*) as cnt FROM job_postings WHERE status != 'archived'").get() as { cnt: number }).cnt
 
-    if (total <= skipThreshold) {
+    if (total < skipThreshold) {
       // Mark all as skipped
       db.prepare("UPDATE job_postings SET affinity_skipped = 1, affinity_score = NULL, affinity_scored_at = NULL WHERE status != 'archived'").run()
     } else {
@@ -122,7 +122,7 @@ export function registerTestStubs(): void {
       tex_path: texPath,
       resume_json: JSON.stringify(STUB_RESUME_DATA),
       schema_version: 1,
-      applied_at: null,
+      applied_at: new Date().toISOString(),
       notes: '',
     }
 

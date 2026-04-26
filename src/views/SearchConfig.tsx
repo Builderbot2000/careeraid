@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import type {
     ScrapeSummary,
     SearchTerm,
@@ -557,11 +557,10 @@ function FiltersTab(): React.ReactElement {
 
 function BanListTab(): React.ReactElement {
     const [banList, setBanList] = useState<BanListEntry[]>([])
-    const [type, setType] = useState<'company' | 'domain'>('company')
-    const [value, setValue] = useState('')
-    const [reason, setReason] = useState('')
-    const [previewCount, setPreviewCount] = useState<number | null>(null)
-    const [previewing, setPreviewing] = useState(false)
+    const [companyValue, setCompanyValue] = useState('')
+    const [domainValue, setDomainValue] = useState('')
+    const [companyPreview, setCompanyPreview] = useState<number | null>(null)
+    const [domainPreview, setDomainPreview] = useState<number | null>(null)
     const [adding, setAdding] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -569,33 +568,38 @@ function BanListTab(): React.ReactElement {
         window.api.getBanList().then(setBanList)
     }, [])
 
-    const handlePreview = useCallback(async (): Promise<void> => {
-        if (!value.trim()) return
-        setPreviewing(true)
-        try {
-            const count = await window.api.previewBanMatch(type, value.trim())
-            setPreviewCount(count)
-        } finally {
-            setPreviewing(false)
-        }
-    }, [type, value])
+    // Auto-preview company bans with debounce
+    useEffect(() => {
+        if (!companyValue.trim()) { setCompanyPreview(null); return }
+        const timer = setTimeout(async () => {
+            const count = await window.api.previewBanMatch('company', companyValue.trim())
+            setCompanyPreview(count)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [companyValue])
+
+    // Auto-preview domain bans with debounce
+    useEffect(() => {
+        if (!domainValue.trim()) { setDomainPreview(null); return }
+        const timer = setTimeout(async () => {
+            const count = await window.api.previewBanMatch('domain', domainValue.trim())
+            setDomainPreview(count)
+        }, 400)
+        return () => clearTimeout(timer)
+    }, [domainValue])
 
     async function handleAdd(): Promise<void> {
-        if (!value.trim()) return
+        // Submit company ban if filled; otherwise domain ban
+        const type: 'company' | 'domain' = companyValue.trim() ? 'company' : 'domain'
+        const val = type === 'company' ? companyValue : domainValue
+        if (!val.trim()) return
         setAdding(true)
         setError(null)
         try {
-            const { entry, deletedCount } = await window.api.addBanEntry({
-                type,
-                value: value.trim(),
-                reason: reason.trim() || undefined,
-            })
+            const { entry, deletedCount } = await window.api.addBanEntry({ type, value: val.trim() })
             setBanList((prev) => [entry, ...prev])
-            setValue('')
-            setReason('')
-            setPreviewCount(null)
-            if (deletedCount > 0) {
-                // Notify user via a brief inline message
+            if (type === 'company') { setCompanyValue(''); setCompanyPreview(null) }
+            else { setDomainValue(''); setDomainPreview(null) }            if (deletedCount > 0) {
                 setError(`✓ Added. ${deletedCount} matching posting(s) deleted from board.`)
                 setTimeout(() => setError(null), 4000)
             }
@@ -609,6 +613,21 @@ function BanListTab(): React.ReactElement {
     async function handleRemove(id: string): Promise<void> {
         await window.api.removeBanEntry(id)
         setBanList((prev) => prev.filter((b) => b.id !== id))
+    }
+
+    const inputStyle: React.CSSProperties = {
+        flex: 1,
+        padding: '6px 8px',
+        fontSize: '0.875rem',
+        border: '1px solid #d1d5db',
+        borderRadius: '4px',
+        fontFamily: 'inherit',
+    }
+    const labelStyle: React.CSSProperties = {
+        fontSize: '0.8rem',
+        fontWeight: 600,
+        color: '#374151',
+        minWidth: '60px',
     }
 
     return (
@@ -626,99 +645,57 @@ function BanListTab(): React.ReactElement {
                     padding: '16px',
                     marginBottom: '20px',
                     background: '#f9fafb',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
                 }}
             >
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
-                    <select
-                        value={type}
-                        onChange={(e) => {
-                            setType(e.target.value as 'company' | 'domain')
-                            setPreviewCount(null)
-                        }}
-                        style={{
-                            padding: '6px 8px',
-                            fontSize: '0.875rem',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontFamily: 'inherit',
-                        }}
-                    >
-                        <option value="company">Company (regex)</option>
-                        <option value="domain">Domain (exact)</option>
-                    </select>
-                    <input
-                        value={value}
-                        onChange={(e) => {
-                            setValue(e.target.value)
-                            setPreviewCount(null)
-                        }}
-                        placeholder={type === 'company' ? 'e.g. Megacorp|BigTech' : 'e.g. megacorp.com'}
-                        style={{
-                            flex: 1,
-                            padding: '6px 8px',
-                            fontSize: '0.875rem',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '4px',
-                            fontFamily: 'inherit',
-                        }}
-                    />
-                </div>
-                <input
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    placeholder="Reason (optional)"
-                    style={{
-                        display: 'block',
-                        width: '100%',
-                        boxSizing: 'border-box',
-                        padding: '6px 8px',
-                        fontSize: '0.875rem',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        fontFamily: 'inherit',
-                        marginBottom: '10px',
-                    }}
-                />
+                {/* Company row */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <button
-                        onClick={handlePreview}
-                        disabled={previewing || !value.trim()}
-                        style={{ padding: '6px 14px', cursor: 'pointer' }}
-                    >
-                        {previewing ? 'Checking…' : 'Preview'}
-                    </button>
-                    {previewCount !== null && (
-                        <span style={{ fontSize: '0.85rem', color: previewCount > 0 ? '#b91c1c' : '#16a34a' }}>
-                            {previewCount > 0
-                                ? `${previewCount} posting(s) will be deleted`
-                                : 'No existing postings match'}
+                    <label htmlFor="ban-company" style={labelStyle}>Company</label>
+                    <input
+                        id="ban-company"
+                        value={companyValue}
+                        onChange={(e) => setCompanyValue(e.target.value)}
+                        placeholder="Company name pattern (e.g. Megacorp|BigTech)"
+                        style={inputStyle}
+                    />
+                    {companyPreview !== null && (
+                        <span style={{ fontSize: '0.8rem', color: companyPreview > 0 ? '#b91c1c' : '#16a34a', whiteSpace: 'nowrap' }}>
+                            {companyPreview > 0 ? `${companyPreview} posting(s) will be deleted` : 'No matches'}
                         </span>
                     )}
+                </div>
+
+                {/* Domain row */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <label htmlFor="ban-domain" style={labelStyle}>Domain</label>
+                    <input
+                        id="ban-domain"
+                        value={domainValue}
+                        onChange={(e) => setDomainValue(e.target.value)}
+                        placeholder="Domain to ban (e.g. megacorp.com)"
+                        style={inputStyle}
+                    />
+                    {domainPreview !== null && (
+                        <span style={{ fontSize: '0.8rem', color: domainPreview > 0 ? '#b91c1c' : '#16a34a', whiteSpace: 'nowrap' }}>
+                            {domainPreview > 0 ? `${domainPreview} posting(s) will be deleted` : 'No matches'}
+                        </span>
+                    )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <button
                         onClick={handleAdd}
-                        disabled={adding || !value.trim()}
-                        style={{
-                            marginLeft: 'auto',
-                            padding: '6px 16px',
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            background: '#dc2626',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '4px',
-                        }}
+                        disabled={adding || (!companyValue.trim() && !domainValue.trim())}
+                        style={{ padding: '6px 16px', fontWeight: 600, cursor: 'pointer', background: '#dc2626', color: 'white', border: 'none', borderRadius: '4px' }}
                     >
-                        {adding ? 'Adding…' : 'Add to Ban List'}
+                        {adding ? 'Adding…' : 'Add ban'}
                     </button>
                 </div>
+
                 {error && (
-                    <div
-                        style={{
-                            marginTop: '10px',
-                            fontSize: '0.85rem',
-                            color: error.startsWith('✓') ? '#166534' : 'crimson',
-                        }}
-                    >
+                    <div style={{ fontSize: '0.85rem', color: error.startsWith('✓') ? '#166534' : 'crimson' }}>
                         {error}
                     </div>
                 )}

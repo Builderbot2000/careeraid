@@ -39,7 +39,7 @@ function applyHardFilters(
 ): JobPosting[] {
   return postings.filter((p) => {
     // 1a — keyword filter
-    const fields: string[] = []
+    const fields: string[] = [p.company]  // company always searched
     if (config.keyword_match_fields.includes('title')) fields.push(p.title)
     if (config.keyword_match_fields.includes('tech_stack')) fields.push(...p.tech_stack)
     if (config.keyword_match_fields.includes('raw_text') && p.raw_text) fields.push(p.raw_text)

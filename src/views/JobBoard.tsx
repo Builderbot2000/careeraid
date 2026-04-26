@@ -187,11 +187,12 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
         })
     }, [loadPostings])
 
-    async function handleTailorResume(posting: JobPosting): Promise<void> {
-        if (posting.status === 'new') {
-            await window.api.updatePostingStatus(posting.id, 'viewed').catch(console.error)
-        }
+    function handleTailorResume(posting: JobPosting): void {
+        // Navigate immediately so the Resume view appears without waiting for the IPC round-trip
         onNavigateToResume(posting)
+        if (posting.status === 'new') {
+            window.api.updatePostingStatus(posting.id, 'viewed').catch(console.error)
+        }
     }
 
     async function handleOpen(posting: JobPosting): Promise<void> {
@@ -290,7 +291,21 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                 </span>
                             </td>
                             <td style={{ padding: '10px 12px 10px 0' }}>
-                                <StatusBadge status={posting.status} />
+                                <select
+                                    value={posting.status}
+                                    onChange={async (e) => {
+                                        const newStatus = e.target.value as JobPosting['status']
+                                        await window.api.updatePostingStatus(posting.id, newStatus).catch(console.error)
+                                        setPostings((prev) =>
+                                            prev.map((p) => (p.id === posting.id ? { ...p, status: newStatus } : p)),
+                                        )
+                                    }}
+                                    style={{ fontSize: '0.78rem', padding: '2px 4px', cursor: 'pointer' }}
+                                >
+                                    {(['new', 'viewed', 'favorited', 'applied', 'interviewing', 'offer', 'rejected', 'ghosted'] as JobPosting['status'][]).map((s) => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
                             </td>
                             <td
                                 style={{

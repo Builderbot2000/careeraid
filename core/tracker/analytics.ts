@@ -54,7 +54,6 @@ export function getBySource(db: Database.Database): SourceMetric[] {
          ) AS avg_days
        FROM job_postings jp
        LEFT JOIN applications a ON a.posting_id = jp.id
-       WHERE jp.status IN ('applied','interviewing','offer','rejected','ghosted')
        GROUP BY source`,
     )
     .all() as { source: string; count: number; responded: number; avg_days: number | null }[]

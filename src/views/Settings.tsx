@@ -98,14 +98,14 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                 <h2>Feature Status</h2>
                 <LockRow label="Claude API key" locked={featureLocks.claudeApiKey} testId="settings-lock-claudeApiKey" />
                 <LockRow label="Claude connectivity" locked={featureLocks.claudeConnectivity} testId="settings-lock-claudeConnectivity" />
-                <LockRow label="xelatex binary" locked={featureLocks.xelatex} testId="settings-lock-xelatex" />
+                <LockRow label="xelatex" locked={featureLocks.xelatex} testId="settings-lock-xelatex" />
                 <LockRow label="Playwright Chromium" locked={featureLocks.playwrightChromium} testId="settings-lock-playwrightChromium" />
                 <LockRow label="Profile has entries" locked={featureLocks.profileEmpty} testId="settings-lock-profileEmpty" />
             </div>
 
             {/* API key */}
             <div className="card">
-                <h2>Anthropic API Key</h2>
+                <h2>Anthropic Credentials</h2>
                 <p style={{ fontSize: 12, color: 'var(--text-dim)', marginBottom: 12 }}>
                     Stored securely in your OS keychain. Never written to disk.
                     {apiKeyPresent && <> A key is currently stored.</>}
@@ -121,11 +121,11 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         style={{ flex: 1 }}
                     />
                     <button data-testid="settings-api-key-save" className="btn btn-primary" onClick={handleSetApiKey} disabled={saving || !apiKeyInput.trim()}>
-                        {apiKeyPresent ? 'Update' : 'Save'}
+                        {apiKeyPresent ? 'Update key' : 'Save key'}
                     </button>
                     {apiKeyPresent && (
                         <button data-testid="settings-api-key-remove" className="btn btn-danger" onClick={handleDeleteApiKey} disabled={saving}>
-                            Remove
+                            Remove key
                         </button>
                     )}
                 </div>
@@ -136,7 +136,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             <div className="card">
                 <h2>Paths</h2>
                 <div className="form-row">
-                    <label>xelatex binary path</label>
+                    <label>TeX binary path</label>
                     <input
                         type="text"
                         value={settings.tex_binary_path ?? ''}
@@ -160,8 +160,9 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             <div className="card">
                 <h2>Scraping</h2>
                 <div className="form-row">
-                    <label>Crawl delay (ms)</label>
+                    <label htmlFor="settings-crawl-delay">Crawl delay (ms)</label>
                     <input
+                        id="settings-crawl-delay"
                         type="number"
                         min={500}
                         max={30000}
@@ -171,8 +172,9 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                     <div className="form-hint">Delay between page fetches (default 3000 ms).</div>
                 </div>
                 <div className="form-row">
-                    <label>Posting retention (days)</label>
+                    <label htmlFor="settings-posting-retention">Posting retention (days)</label>
                     <input
+                        id="settings-posting-retention"
                         type="number"
                         min={1}
                         max={365}
@@ -273,8 +275,9 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             <div className="card">
                 <h2>Logging</h2>
                 <div className="form-row">
-                    <label>Log level</label>
+                    <label htmlFor="settings-log-level">Log level</label>
                     <select
+                        id="settings-log-level"
                         value={settings.log_level}
                         onChange={(e) => saveSetting('log_level', e.target.value as SettingsType['log_level'])}
                     >
@@ -285,7 +288,7 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                     </select>
                 </div>
                 <div className="form-row">
-                    <label>Log retention (days)</label>
+                    <label>Log keep (days)</label>
                     <input
                         type="number"
                         min={1}

@@ -209,6 +209,10 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('data:import', mode)
   },
 
+  importDataFromFile(mode: 'merge' | 'replace', filePath: string): Promise<{ imported: number }> {
+    return ipcRenderer.invoke('data:import-file', { mode, filePath })
+  },
+
   // ── Events ─────────────────────────────────────────────────────────────────
   onScrapingCommitted(cb: () => void): void {
     ipcRenderer.on('jobs:scrape-committed', () => cb())

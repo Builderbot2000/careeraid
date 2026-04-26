@@ -118,29 +118,25 @@ export default function Analytics(): React.ReactElement {
 
             {funnel && (
                 <div data-testid="analytics-funnel" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                    <StatCard label="Applied" value={funnel.applied} />
+                    <StatCard label="Applications" value={funnel.applied} />
                     <StatCard label="Interviewing" value={funnel.interviewing} />
                     <StatCard label="Offers" value={funnel.offer} />
                     <StatCard label="Rejected" value={funnel.rejected} />
                     <StatCard label="Response Rate" value={pct(funnel.response_rate)} sub="of applications" />
-                    <StatCard label="Conversion" value={pct(funnel.conversion_rate)} sub="applied → offer" />
+                    <StatCard label="Conversion rate" value={pct(funnel.conversion_rate)} sub="apply → offer" />
                 </div>
             )}
 
             <SectionHeader title="Applications per Week (last 12 weeks)" />
-            {weekly.length === 0 ? (
-                <p style={{ fontSize: '0.85rem', color: '#6b7280' }}>No weekly data yet.</p>
-            ) : (
-                <ResponsiveContainer data-testid="analytics-weekly-chart" width="100%" height={220}>
-                    <BarChart data={weekly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="week" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                        <Tooltip />
-                        <Bar dataKey="applications" fill="#2563eb" radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                </ResponsiveContainer>
-            )}
+            <ResponsiveContainer data-testid="analytics-weekly-chart" width="100%" height={220}>
+                <BarChart data={weekly} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="week" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Bar dataKey="applications" fill="#2563eb" radius={[3, 3, 0, 0]} />
+                </BarChart>
+            </ResponsiveContainer>
 
             <SectionHeader title="By Source" />
             {bySource.length === 0 ? (
@@ -194,11 +190,10 @@ export default function Analytics(): React.ReactElement {
                 </table>
             )}
 
-            <SectionHeader title="LLM Usage & Cost" />
+            <SectionHeader title="LLM Cost & Usage" />
             {llmCost && (
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                     <StatCard label="All-time cost" value={usd(llmCost.all_time)} />
-                    <StatCard label="This month" value={usd(llmCost.current_month)} />
                 </div>
             )}
             {llmByType.length > 0 && (

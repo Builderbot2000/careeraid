@@ -303,6 +303,7 @@ export interface ElectronAPI {
   createBackup(): Promise<string | null>
   exportData(): Promise<string | null>
   importData(mode: 'merge' | 'replace'): Promise<{ imported: number } | null>
+  importDataFromFile(mode: 'merge' | 'replace', filePath: string): Promise<{ imported: number }>
 
   // Events
   onScrapingCommitted(cb: () => void): void

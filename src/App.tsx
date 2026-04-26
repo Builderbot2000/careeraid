@@ -36,6 +36,7 @@ export default function App(): React.ReactElement {
         profileEmpty: false,
     })
     const [pendingNavPosting, setPendingNavPosting] = useState<JobPosting | null>(null)
+    const [searchNavKey, setSearchNavKey] = useState(0)
 
     useEffect(() => {
         window.api.onFeatureLocks((locks) => setFeatureLocks(locks))
@@ -50,6 +51,7 @@ export default function App(): React.ReactElement {
         const item = NAV.find((n) => n.id === id)
         if (item && isLocked(item)) return
         setPendingNavPosting(posting ?? null)
+        if (id === 'search') setSearchNavKey((k) => k + 1)
         setView(id)
     }
 
@@ -76,8 +78,11 @@ export default function App(): React.ReactElement {
 
             <main className="content">
                 {view === 'profile' && <Profile />}
-                {view === 'search' && <SearchConfig />}
-                {view === 'jobs' && <JobBoard onNavigateToResume={(posting) => navigate('resume', posting)} />}
+                {view === 'search' && <SearchConfig key={searchNavKey} />}
+                {view === 'jobs' && <JobBoard onNavigateToResume={(posting) => {
+                    setPendingNavPosting(posting)
+                    setView('resume')
+                }} />}
                 {view === 'resume' && <ResumePreview initialPosting={pendingNavPosting} />}
                 {view === 'tracker' && <Tracker />}
                 {view === 'analytics' && <Analytics />}

@@ -29,8 +29,10 @@ export const test = base.extend<AppFixtures>({
     const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'careeraid-test-'))
 
     const electronApp = await electron.launch({
-      args: [path.join(__dirname, '../../../out/main/index.js')],
-      headless: true,
+      args: [
+        '--disable-renderer-backgrounding',
+        path.join(__dirname, '../../../out/main/index.js'),
+      ],
       env: {
         ...process.env,
         NODE_ENV: 'test',

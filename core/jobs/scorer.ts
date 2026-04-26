@@ -67,7 +67,7 @@ export async function scorePostings(
   const tokenBudget = settings.affinity_token_budget ?? 80_000
 
   // Skip threshold: mark all skipped if candidate pool is small
-  if (candidates.length <= skipThreshold) {
+  if (candidates.length < skipThreshold) {
     const updateSkip = db.prepare(
       `UPDATE job_postings
        SET affinity_skipped = 1, affinity_score = NULL, affinity_scored_at = NULL

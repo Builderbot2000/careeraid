@@ -54,6 +54,13 @@ const isDev = process.env.NODE_ENV === 'development'
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
+let currentFeatureLocks: FeatureLocks = {
+  claudeApiKey: false,
+  claudeConnectivity: false,
+  xelatex: false,
+  playwrightChromium: false,
+  profileEmpty: false,
+}
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -70,7 +77,9 @@ function createWindow(): BrowserWindow {
     },
   })
 
-  win.once('ready-to-show', () => win.show())
+  if (process.env['CAREERAID_TEST'] !== '1') {
+    win.once('ready-to-show', () => win.show())
+  }
 
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -198,6 +207,14 @@ async function runStartupValidation(): Promise<{
     featureLocks.profileEmpty = true
   }
 
+  // In test mode, unlock xelatex and profile locks (claudeApiKey is left real so
+  // the nav lock badge renders correctly in settings tests).
+  if (process.env.CAREERAID_TEST === '1') {
+    featureLocks.claudeConnectivity = false
+    featureLocks.xelatex = false
+    featureLocks.profileEmpty = false
+  }
+
   logger.info('Startup validation complete', featureLocks)
   return { hardBlock: false, featureLocks }
 }
@@ -220,9 +237,15 @@ function registerIpcHandlers(): void {
       throw new Error('API key must be a non-empty string')
     }
     saveApiKey(key.trim())
+    currentFeatureLocks.claudeApiKey = false
+    mainWindow?.webContents.send('startup:feature-locks', { ...currentFeatureLocks })
   })
 
-  ipcMain.handle('settings:delete-api-key', () => deleteApiKey())
+  ipcMain.handle('settings:delete-api-key', () => {
+    deleteApiKey()
+    currentFeatureLocks.claudeApiKey = true
+    mainWindow?.webContents.send('startup:feature-locks', { ...currentFeatureLocks })
+  })
 
   // Shell — only allow https:// URLs
   ipcMain.handle('shell:open-external', (_event, url: string) => {
@@ -548,10 +571,13 @@ function registerIpcHandlers(): void {
     (_event, { type, value }: { type: 'company' | 'domain'; value: string }) => {
       const db = getDb()
       if (type === 'domain') {
-        const row = db
-          .prepare('SELECT COUNT(*) AS count FROM job_postings WHERE resolved_domain = ?')
-          .get(value) as { count: number }
-        return row.count
+        const rows = db
+          .prepare('SELECT resolved_domain, url FROM job_postings')
+          .all() as { resolved_domain: string | null; url: string }[]
+        return rows.filter((r) => {
+          const domain = r.resolved_domain ?? (() => { try { return new URL(r.url).hostname } catch { return null } })()
+          return domain === value
+        }).length
       }
       // Company — test regex against all company names
       const companies = db
@@ -584,10 +610,18 @@ function registerIpcHandlers(): void {
       // Hard-delete matching postings
       let deletedCount = 0
       if (type === 'domain') {
-        const result = db
-          .prepare('DELETE FROM job_postings WHERE resolved_domain = ?')
-          .run(value.trim())
-        deletedCount = result.changes
+        const rows = db
+          .prepare('SELECT id, resolved_domain, url FROM job_postings')
+          .all() as { id: string; resolved_domain: string | null; url: string }[]
+        const toDelete = rows.filter((r) => {
+          const domain = r.resolved_domain ?? (() => { try { return new URL(r.url).hostname } catch { return null } })()
+          return domain === value.trim()
+        }).map((r) => r.id)
+        if (toDelete.length > 0) {
+          const placeholders = toDelete.map(() => '?').join(',')
+          db.prepare(`DELETE FROM job_postings WHERE id IN (${placeholders})`).run(...toDelete)
+          deletedCount = toDelete.length
+        }
       } else {
         const all = db.prepare('SELECT id, company FROM job_postings').all() as {
           id: string
@@ -819,6 +853,7 @@ app.whenReady().then(async () => {
     return
   }
 
+  currentFeatureLocks = result.featureLocks
   mainWindow = createWindow()
 
   // Push feature lock state to renderer once its IPC listener is ready

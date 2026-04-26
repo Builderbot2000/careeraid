@@ -12,21 +12,21 @@ test.describe('Data Management Module', () => {
     await expect(page.getByText(title)).toBeVisible()
   }
 
-  test('backup creates a database file at the expected path', async ({ page, app }) => {
+  test('backup creates a database file at the expected path', async ({ page }) => {
     // Trigger backup via the IPC (stub bypasses the OS dialog)
-    const filePath = await app.evaluate(({ ipcRenderer }) =>
-      ipcRenderer.invoke('backup:create'),
+    const filePath = await page.evaluate(() =>
+      window.api.createBackup(),
     )
     expect(typeof filePath).toBe('string')
     expect(fs.existsSync(filePath as string)).toBe(true)
     expect(path.extname(filePath as string)).toBe('.db')
   })
 
-  test('export writes a JSON file containing profile entries', async ({ page, app }) => {
+  test('export writes a JSON file containing profile entries', async ({ page }) => {
     await addProfileEntry(page, 'Export Test Entry')
 
-    const filePath = await app.evaluate(({ ipcRenderer }) =>
-      ipcRenderer.invoke('data:export'),
+    const filePath = await page.evaluate(() =>
+      window.api.exportData(),
     )
     expect(typeof filePath).toBe('string')
     expect(fs.existsSync(filePath as string)).toBe(true)
@@ -38,55 +38,52 @@ test.describe('Data Management Module', () => {
     expect(titles).toContain('Export Test Entry')
   })
 
-  test('import in merge mode adds new entries without overwriting existing ones', async ({ page, app }) => {
+  test('import in merge mode adds new entries without overwriting existing ones', async ({ page }) => {
     await addProfileEntry(page, 'Pre-existing Entry')
 
     // Export the current state as the import source
-    const exportPath = await app.evaluate(({ ipcRenderer }) =>
-      ipcRenderer.invoke('data:export'),
+    const exportPath = await page.evaluate(() =>
+      window.api.exportData(),
     ) as string
 
     // Add another entry after export — this should survive a merge import
     await addProfileEntry(page, 'Post-export Entry')
 
-    // Trigger merge import pointing at the export file
-    // In test mode, data:import stub uses a temp path; here we call it via evaluate
-    const result = await app.evaluate(
-      async ({ ipcRenderer }, importPath) => {
-        // Override open dialog result by directly calling the underlying import logic
-        // We invoke a special test-only IPC to import from a specific path
-        return ipcRenderer.invoke('data:import-file', { mode: 'merge', filePath: importPath })
-      },
-      exportPath,
+    // Import back from the export file using merge mode
+    await page.evaluate(
+      ([mode, fp]) => window.api.importDataFromFile(mode as 'merge' | 'replace', fp),
+      ['merge', exportPath] as [string, string],
     )
 
+    // Navigate away then back to force Profile to re-fetch from DB
+    await goTo(page, 'Settings')
     await goTo(page, 'Profile')
     // Both entries should be present (merge doesn't overwrite)
-    await expect(page.getByText('Pre-existing Entry')).toBeVisible()
-    await expect(page.getByText('Post-export Entry')).toBeVisible()
+    await expect(page.getByText('Pre-existing Entry', { exact: true })).toBeVisible()
+    await expect(page.getByText('Post-export Entry', { exact: true })).toBeVisible()
   })
 
-  test('import in replace mode clears and replaces entries', async ({ page, app }) => {
+  test('import in replace mode clears and replaces entries', async ({ page }) => {
     await addProfileEntry(page, 'Original Entry')
 
     // Export current state
-    const exportPath = await app.evaluate(({ ipcRenderer }) =>
-      ipcRenderer.invoke('data:export'),
+    const exportPath = await page.evaluate(() =>
+      window.api.exportData(),
     ) as string
 
     // Add a new entry after export — this should be gone after a replace import
     await addProfileEntry(page, 'Entry Added After Export')
 
     // Replace import
-    await app.evaluate(
-      async ({ ipcRenderer }, importPath) => {
-        return ipcRenderer.invoke('data:import-file', { mode: 'replace', filePath: importPath })
-      },
-      exportPath,
+    await page.evaluate(
+      ([mode, fp]) => window.api.importDataFromFile(mode as 'merge' | 'replace', fp),
+      ['replace', exportPath] as [string, string],
     )
 
+    // Navigate away then back to force Profile to re-fetch from DB
+    await goTo(page, 'Settings')
     await goTo(page, 'Profile')
-    await expect(page.getByText('Original Entry')).toBeVisible()
-    await expect(page.getByText('Entry Added After Export')).not.toBeVisible()
+    await expect(page.getByText('Original Entry', { exact: true })).toBeVisible()
+    await expect(page.getByText('Entry Added After Export', { exact: true })).not.toBeVisible()
   })
 })
