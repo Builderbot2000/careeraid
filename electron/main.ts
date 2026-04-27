@@ -35,6 +35,7 @@ import { pdfPathToUrl } from '../core/resume/previewer'
 import { chromium } from 'playwright'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
+import { IndeedAdapter } from '../core/jobs/adapters/indeed'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
 import { getFilteredRankedPostings, getRankedPostings } from '../core/jobs/ranker'
 import { generateSearchTerms, generateSearchTermsFromProfile } from '../core/jobs/searchTermGen'
@@ -786,6 +787,10 @@ function registerIpcHandlers(): void {
     try { return fs.existsSync(chromium.executablePath()) } catch { return false }
   }
 
+  function indeedAvailable(): boolean {
+    try { return fs.existsSync(chromium.executablePath()) } catch { return false }
+  }
+
   ipcMain.handle('jobs:list-adapters', () => [
     {
       id: 'mock',
@@ -799,12 +804,21 @@ function registerIpcHandlers(): void {
       description: 'Scrapes LinkedIn public job search (no login required)',
       available: linkedInAvailable(),
     },
+    {
+      id: 'indeed',
+      name: 'Indeed',
+      description: 'Scrapes Indeed public job search (no login required)',
+      available: indeedAvailable(),
+    },
   ])
 
   ipcMain.handle('jobs:run-scrape', async (_event, adapterIds?: string[]) => {
-    const all: InstanceType<typeof MockAdapter | typeof LinkedInAdapter>[] = [new MockAdapter()]
+    const all: InstanceType<typeof MockAdapter | typeof LinkedInAdapter | typeof IndeedAdapter>[] = [new MockAdapter()]
     if (linkedInAvailable()) {
       all.push(new LinkedInAdapter())
+    }
+    if (indeedAvailable()) {
+      all.push(new IndeedAdapter())
     }
     const adapters = adapterIds ? all.filter((a) => adapterIds.includes(a.id)) : all
     return runScrape(getDb(), adapters, (p) => {
