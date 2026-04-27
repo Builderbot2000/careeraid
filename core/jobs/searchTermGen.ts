@@ -85,12 +85,14 @@ export async function generateSearchTerms(
 
   const inserted: SearchTerm[] = []
 
-  db.transaction(() => {
-    db.prepare(`DELETE FROM search_terms WHERE source = 'llm_generated'`).run()
+  const existingTerms = db.prepare(`SELECT term FROM search_terms`).all() as { term: string }[]
+  const existingRoles = new Set(existingTerms.map((r) => r.term.toLowerCase()))
 
+  db.transaction(() => {
     for (const t of rawTerms) {
       if (typeof t.role !== 'string' || !t.role.trim()) continue
       const role = t.role.trim()
+      if (existingRoles.has(role.toLowerCase())) continue
       const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
       const locations = location ? JSON.stringify([location]) : null
       const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
@@ -193,12 +195,14 @@ export async function generateSearchTermsFromProfile(
 
   const inserted: SearchTerm[] = []
 
-  db.transaction(() => {
-    db.prepare(`DELETE FROM search_terms WHERE source = 'llm_generated'`).run()
+  const existingTerms2 = db.prepare(`SELECT term FROM search_terms`).all() as { term: string }[]
+  const existingRoles2 = new Set(existingTerms2.map((r) => r.term.toLowerCase()))
 
+  db.transaction(() => {
     for (const t of rawTerms) {
       if (typeof t.role !== 'string' || !t.role.trim()) continue
       const role = t.role.trim()
+      if (existingRoles2.has(role.toLowerCase())) continue
       const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
       const locations = location ? JSON.stringify([location]) : null
       const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null

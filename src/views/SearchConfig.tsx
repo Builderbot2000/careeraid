@@ -291,7 +291,7 @@ function IntentTab({
         setGenerateError(null)
         try {
             const generated = await window.api.generateSearchTerms()
-            setTerms(generated)
+            setTerms((prev) => [...prev, ...generated])
         } catch (err) {
             setGenerateError(err instanceof Error ? err.message : String(err))
         } finally {
@@ -304,7 +304,7 @@ function IntentTab({
         setGenerateError(null)
         try {
             const generated = await window.api.generateSearchTermsFromProfile()
-            setTerms(generated)
+            setTerms((prev) => [...prev, ...generated])
         } catch (err) {
             setGenerateError(err instanceof Error ? err.message : String(err))
         } finally {

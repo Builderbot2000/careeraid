@@ -1,12 +1,12 @@
-import { chromium, type Browser, type ElementHandle, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
 import { BaseAdapter, type JobPosting, type SearchFilters } from './base'
 import { extractYoe, extractSeniority, extractTechStack } from './linkedin'
 
 const SOURCE = 'indeed'
 const SCRAPER_VERSION = 'indeed-adapter@1'
 
-/** Maximum search-result pages to fetch per search term (10 cards per page). */
-const MAX_PAGES = 5
+/** Indeed restricts search results to 1 page (~10 cards) without login. */
+const MAX_PAGES = 1
 const PAGE_SIZE = 10
 
 /** Abort a search term after this many consecutive card-level parse failures. */
@@ -16,16 +16,10 @@ const MAX_CONSECUTIVE_FAILS = 5
 // Centralised here so they are easy to update when Indeed's DOM changes.
 
 export const SELECTORS = {
-  // Search results list
-  resultsList: '#mosaic-provider-jobcards ul',
-  resultItem: '#mosaic-provider-jobcards ul > li',
-  cardLink: 'h2.jobTitle a[data-jk]',
-  cardTitle: 'h2.jobTitle a',
-  cardCompany: '[data-testid="company-name"]',
-  cardLocation: '[data-testid="text-location"]',
-  cardPostedAt: '[data-testid="myJobsStateDate"]',
-  // Job detail page
-  detailDescription: '#jobDescriptionText',
+  // Stable job-key attribute — used as the presence signal for loaded results
+  anyJobKey: '[data-jk]',
+  // Inline detail panel (right-side panel rendered when a card is selected)
+  inlineDetail: '#jobDescriptionText',
   // Auth wall detection
   authWallInput: '#login-email-input',
 } as const
@@ -96,9 +90,10 @@ export function parsePostedAt(text: string): string | null {
   return d.toISOString().slice(0, 10)
 }
 
-// ─── DOM parsers (exported for unit testing) ──────────────────────────────────
+// ─── DOM parsers ─────────────────────────────────────────────────────────────
 
 export interface ParsedCard {
+  jk: string
   href: string
   title: string
   company: string
@@ -106,32 +101,86 @@ export interface ParsedCard {
   posted_at: string | null
 }
 
-/** Returns null when required card fields (title, jk, company) are missing. */
-export async function parseCard(card: ElementHandle): Promise<ParsedCard | null> {
-  const linkEl    = await card.$(SELECTORS.cardLink)
-  const titleEl   = await card.$(SELECTORS.cardTitle)
-  const companyEl = await card.$(SELECTORS.cardCompany)
-  const locationEl = await card.$(SELECTORS.cardLocation)
-  const postedEl  = await card.$(SELECTORS.cardPostedAt)
+/**
+ * Extracts all job cards from the current search-results page in a single
+ * page.evaluate() call. This avoids the Playwright stale-ElementHandle error
+ * that occurs when Indeed's SPA re-renders the list between async accesses.
+ */
+export async function extractCards(page: Page): Promise<ParsedCard[]> {
+  const rawCards = await page.evaluate(() => {
+    // Try multiple container selectors in priority order
+    const containerSelectors = [
+      '#mosaic-provider-jobcards ul > li',
+      '[data-testid="jobsearch-ResultsList"] li',
+      '.resultsList li',
+      // Last resort: any li that contains a data-jk link
+      'li:has(a[data-jk])',
+    ]
 
-  const jk      = await linkEl?.getAttribute('data-jk') ?? null
-  const title   = (await titleEl?.textContent())?.trim() ?? null
-  const company = (await companyEl?.textContent())?.trim() ?? null
-  const location = (await locationEl?.textContent())?.trim() ?? ''
-  const postedText = (await postedEl?.textContent())?.trim() ?? ''
-  const posted_at = parsePostedAt(postedText)
+    let items: Element[] = []
+    for (const sel of containerSelectors) {
+      try {
+        const found = Array.from(document.querySelectorAll(sel))
+        if (found.length > 0) { items = found; break }
+      } catch { /* selector unsupported — try next */ }
+    }
 
-  if (!jk || !title || !company) return null
+    return items.map((li) => {
+      const link =
+        li.querySelector('h2.jobTitle a[data-jk]') ??
+        li.querySelector('a[data-jk]')
 
-  return { href: cleanJobUrl(jk), title, company, location, posted_at }
+      const titleEl =
+        li.querySelector('[id^="jobTitle"]') ??
+        li.querySelector('h2.jobTitle a span') ??
+        li.querySelector('h2.jobTitle a')
+
+      const companyEl =
+        li.querySelector('[data-testid="company-name"]') ??
+        li.querySelector('.companyName')
+
+      const locationEl =
+        li.querySelector('[data-testid="text-location"]') ??
+        li.querySelector('[data-testid="job-location"]') ??
+        li.querySelector('.companyLocation')
+
+      const dateEl =
+        li.querySelector('[data-testid="myJobsStateDate"]') ??
+        li.querySelector('[data-testid="post-age"]') ??
+        li.querySelector('.date') ??
+        li.querySelector('span.result-link-bar-separator ~ span')
+
+      return {
+        jk: link?.getAttribute('data-jk') ?? null,
+        title: titleEl?.textContent?.trim() ?? null,
+        company: companyEl?.textContent?.trim() ?? null,
+        location: locationEl?.textContent?.trim() ?? '',
+        postedText: dateEl?.textContent?.trim() ?? '',
+      }
+    })
+  })
+
+  const results: ParsedCard[] = []
+  for (const raw of rawCards) {
+    if (!raw.jk || !raw.title || !raw.company) continue
+    results.push({
+      jk: raw.jk,
+      href: cleanJobUrl(raw.jk),
+      title: raw.title,
+      company: raw.company,
+      location: raw.location,
+      posted_at: parsePostedAt(raw.postedText),
+    })
+  }
+  return results
 }
 
 export interface ParsedDetail {
   raw_text: string | null
 }
 
-export async function parseDetail(page: Page): Promise<ParsedDetail> {
-  const descEl = await page.$(SELECTORS.detailDescription)
+export async function parseInlineDetail(page: Page): Promise<ParsedDetail> {
+  const descEl = await page.$(SELECTORS.inlineDetail)
   const raw_text = descEl ? (await descEl.innerText()).trim() : null
   return { raw_text }
 }
@@ -154,7 +203,10 @@ export class IndeedAdapter extends BaseAdapter {
     filters: SearchFilters,
     onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
-    const browser = await chromium.launch({ headless: true })
+    const browser = await chromium.launch({
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+    })
     try {
       return await this._scrape(browser, term, filters, onPosting)
     } finally {
@@ -168,8 +220,14 @@ export class IndeedAdapter extends BaseAdapter {
     filters: SearchFilters,
     onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
-    const searchPage = await browser.newPage()
-    const detailPage = await browser.newPage()
+    const context: BrowserContext = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    })
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+    })
+    const searchPage = await context.newPage()
     const results: Omit<JobPosting, 'id'>[] = []
     let consecutiveFails = 0
     const now = new Date().toISOString()
@@ -179,47 +237,49 @@ export class IndeedAdapter extends BaseAdapter {
 
     for (let pageNum = 0; pageNum < pageLimit; pageNum++) {
       const url = buildSearchUrl(term, filters, pageNum * PAGE_SIZE)
-      await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+      await searchPage.goto(url, { waitUntil: 'load', timeout: 30_000 })
+      console.log(`[indeed] page ${pageNum} landed on: ${searchPage.url()}`)
 
       // Graceful abort on auth wall
-      if (await isAuthWall(searchPage)) break
-
-      // Wait for results list; break if no results returned
-      try {
-        await searchPage.waitForSelector(SELECTORS.resultsList, { timeout: 10_000 })
-      } catch {
+      if (await isAuthWall(searchPage)) {
+        console.warn(`[indeed] auth wall detected on page ${pageNum}, url: ${searchPage.url()}`)
         break
       }
 
-      const cards = await searchPage.$$(SELECTORS.resultItem)
+      // Wait for at least one job-key element — more stable than the ul container
+      try {
+        await searchPage.waitForSelector(SELECTORS.anyJobKey, { timeout: 15_000 })
+      } catch {
+        console.warn(`[indeed] waitForSelector([data-jk]) timed out on page ${pageNum}, url: ${searchPage.url()}`)
+        break
+      }
+
+      // Extract all card data in one evaluate() call to avoid stale handles
+      const cards = await extractCards(searchPage)
+      console.log(`[indeed] page ${pageNum} extracted ${cards.length} cards`)
       if (cards.length === 0) break
 
       for (const card of cards) {
         if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) return results
         if (filters.maxResults != null && results.length >= filters.maxResults) return results
 
-        const parsed = await parseCard(card)
-        if (!parsed) {
-          consecutiveFails++
-          continue
-        }
-
-        const { href, title, company, location, posted_at } = parsed
-
-        await delay(this.delayMs)
+        const { href, title, company, location, posted_at } = card
 
         let raw_text: string | null = null
 
-        try {
-          await detailPage.goto(href, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+        await delay(this.delayMs)
 
-          // If detail page hits an auth wall, skip detail but keep card data
-          if (!(await isAuthWall(detailPage))) {
-            const detail = await parseDetail(detailPage)
+        try {
+          // Click the card link to load the inline detail panel — no separate page needed
+          const cardLink = await searchPage.$(`a[data-jk="${card.jk}"]`)
+          if (cardLink) {
+            await cardLink.click()
+            await searchPage.waitForSelector(SELECTORS.inlineDetail, { timeout: 10_000 })
+            const detail = await parseInlineDetail(searchPage)
             raw_text = detail.raw_text
           }
         } catch {
-          // Detail fetch failed — continue with card-level data only
+          // Inline panel failed to load — continue with card-level data only
         }
 
         const { yoe_min, yoe_max } = extractYoe(raw_text ?? '')

@@ -199,66 +199,71 @@ export async function runScrape(
     }
   }
 
-  for (const adapter of adapters) {
-    const searchTerms = expandedRuns
+  const adapterResults = await Promise.allSettled(
+    adapters.map(async (adapter) => {
+      onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
+      let adapterFetched = 0
+      const adapterPostings: JobPosting[] = []
 
-    onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
-    let adapterFetched = 0
-    let hadError = false
+      for (const run of expandedRuns) {
+        const filters: SearchFilters = {}
+        if (run.location) filters.location = run.location
+        if (run.seniorities) filters.seniorities = run.seniorities
+        if (run.workTypes) filters.workTypes = run.workTypes
+        if (run.recency) filters.recency = run.recency
+        if (run.maxResults != null) filters.maxResults = run.maxResults
 
-    for (const run of searchTerms) {
-      const filters: SearchFilters = {}
-      if (run.location) filters.location = run.location
-      if (run.seniorities) filters.seniorities = run.seniorities
-      if (run.workTypes) filters.workTypes = run.workTypes
-      if (run.recency) filters.recency = run.recency
-      if (run.maxResults != null) filters.maxResults = run.maxResults
-
-      let postings: Awaited<ReturnType<typeof adapter.search>>
-      try {
-        postings = await adapter.search(run.term, filters, () => {
-          adapterFetched++
-          onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
-        })
-      } catch (err) {
-        onProgress?.({
-          adapterId: adapter.id,
-          status: 'error',
-          error: err instanceof Error ? err.message : String(err),
-        })
-        hadError = true
-        break
+        let postings: Awaited<ReturnType<typeof adapter.search>>
+        try {
+          postings = await adapter.search(run.term, filters, () => {
+            adapterFetched++
+            onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
+          })
+        } catch (err) {
+          onProgress?.({
+            adapterId: adapter.id,
+            status: 'error',
+            error: err instanceof Error ? err.message : String(err),
+          })
+          return { postings: adapterPostings, fetched: adapterFetched }
+        }
+        adapterPostings.push(...postings)
       }
-      fetched += postings.length
 
-      for (const posting of postings) {
-        if (existingUrls.has(posting.url)) {
-          dupes++
-          continue
-        }
-
-        const ck = compositeKey(posting.company, posting.title, posting.posted_at)
-        if (existingComposites.has(ck)) {
-          dupes++
-          continue
-        }
-
-        // In-memory dedup against already-staged postings in this run
-        const alreadyStaged = results.some(
-          (r) => r.url === posting.url || compositeKey(r.company, r.title, r.posted_at) === ck,
-        )
-        if (alreadyStaged) {
-          dupes++
-          continue
-        }
-
-        // Aggregator assigns the canonical DB id
-        results.push({ ...posting, id: randomUUID() } as JobPosting)
-      }
-    }
-
-    if (!hadError) {
       onProgress?.({ adapterId: adapter.id, status: 'done', fetched: adapterFetched })
+      return { postings: adapterPostings, fetched: adapterFetched }
+    }),
+  )
+
+  for (const settled of adapterResults) {
+    if (settled.status !== 'fulfilled') continue
+
+    const { postings: adapterPostings } = settled.value
+    fetched += adapterPostings.length
+
+    for (const posting of adapterPostings) {
+      if (existingUrls.has(posting.url)) {
+        dupes++
+        continue
+      }
+
+      const ck = compositeKey(posting.company, posting.title, posting.posted_at)
+      if (existingComposites.has(ck)) {
+        dupes++
+        continue
+      }
+
+      // In-memory dedup against already-staged postings in this run
+      const alreadyStaged = results.some(
+        (r) => r.url === posting.url || compositeKey(r.company, r.title, r.posted_at) === ck,
+      )
+      if (alreadyStaged) {
+        dupes++
+        continue
+      }
+
+      // Aggregator assigns the canonical DB id
+      results.push({ ...posting, id: randomUUID() } as JobPosting)
     }
   }
 
