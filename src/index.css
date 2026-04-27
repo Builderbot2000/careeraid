@@ -80,6 +80,15 @@ body {
   margin-left: auto;
 }
 
+.pending-badge {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .content {
   flex: 1;
   overflow-y: auto;

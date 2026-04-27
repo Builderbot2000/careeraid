@@ -64,6 +64,7 @@ export interface Application {
   schema_version: number
   applied_at: string | null
   notes: string
+  name: string | null
 }
 
 export interface TailorResumeResult {
@@ -84,6 +85,9 @@ export type PostingStatus =
   | 'ghosted'
 
 export type Seniority = 'intern' | 'junior' | 'mid' | 'senior' | 'staff' | 'any'
+export type SearchTermSeniority = 'intern' | 'junior' | 'mid' | 'senior' | 'staff'
+export type WorkType = 'remote' | 'hybrid' | 'onsite'
+export type Recency = 'day' | 'week' | 'month'
 
 export interface JobPosting {
   id: string
@@ -148,11 +152,24 @@ export interface AdapterProgress {
 
 export interface SearchTerm {
   id: string
-  adapter_id: string
   term: string
   enabled: boolean
   source: 'llm_generated' | 'user_added'
   created_at: string
+  locations: string[] | null
+  seniorities: SearchTermSeniority[] | null
+  work_type: WorkType[] | null
+  recency: Recency | null
+  max_results: number | null
+}
+
+export interface AddSearchTermData {
+  role: string
+  locations?: string[] | null
+  seniorities?: SearchTermSeniority[] | null
+  work_type?: WorkType[] | null
+  recency?: Recency | null
+  max_results?: number | null
 }
 
 // ─── Ban list ─────────────────────────────────────────────────────────────────
@@ -278,6 +295,7 @@ export interface ElectronAPI {
   getApplications(): Promise<Application[]>
   getAvailableTemplates(): Promise<string[]>
   recompileResume(applicationId: string): Promise<string>
+  renameResume(applicationId: string, name: string): Promise<void>
 
   // Search config
   getSearchConfig(): Promise<SearchConfigRow>
@@ -286,8 +304,18 @@ export interface ElectronAPI {
   // Search terms
   getSearchTerms(): Promise<SearchTerm[]>
   generateSearchTerms(): Promise<SearchTerm[]>
-  updateSearchTerm(id: string, updates: { term?: string; enabled?: boolean }): Promise<void>
-  addSearchTerm(adapterId: string, term: string): Promise<SearchTerm>
+  generateSearchTermsFromProfile(): Promise<SearchTerm[]>
+  updateSearchTerm(id: string, updates: {
+    term?: string
+    enabled?: boolean
+    locations?: string[] | null
+    seniorities?: SearchTermSeniority[] | null
+    work_type?: WorkType[] | null
+    recency?: Recency | null
+    max_results?: number | null
+  }): Promise<void>
+  suggestLocations(query: string): Promise<string[]>
+  addSearchTerm(data: AddSearchTermData): Promise<SearchTerm>
   deleteSearchTerm(id: string): Promise<void>
 
   // Ban list

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import type { FeatureLocks, JobPosting } from './shared/ipc-types'
+import type { FeatureLocks, JobPosting, ScrapeSummary, AdapterProgress } from './shared/ipc-types'
 import Settings from './views/Settings'
 import Profile from './views/Profile'
 import SearchConfig from './views/SearchConfig'
@@ -7,6 +7,8 @@ import JobBoard from './views/JobBoard'
 import ResumePreview from './views/ResumePreview'
 import Tracker from './views/Tracker'
 import Analytics from './views/Analytics'
+
+export type ScrapeState = 'idle' | 'running' | 'pending_commit' | 'error'
 
 type View = 'profile' | 'search' | 'jobs' | 'resume' | 'tracker' | 'analytics' | 'settings'
 
@@ -37,10 +39,53 @@ export default function App(): React.ReactElement {
     })
     const [pendingNavPosting, setPendingNavPosting] = useState<JobPosting | null>(null)
     const [searchNavKey, setSearchNavKey] = useState(0)
+    const [scrapeState, setScrapeState] = useState<ScrapeState>('idle')
+    const [scrapeSummary, setScrapeSummary] = useState<ScrapeSummary | null>(null)
+    const [adapterProgress, setAdapterProgress] = useState<Record<string, AdapterProgress>>({})
+    const [scrapeError, setScrapeError] = useState<string | null>(null)
+    const [scrapeCommitting, setScrapeCommitting] = useState(false)
 
     useEffect(() => {
         window.api.onFeatureLocks((locks) => setFeatureLocks(locks))
+        window.api.onAdapterProgress((p) => {
+            setAdapterProgress((prev) => ({ ...prev, [p.adapterId]: p }))
+        })
     }, [])
+
+    async function runScrape(adapterIds: string[]): Promise<void> {
+        setScrapeState('running')
+        setScrapeError(null)
+        setScrapeSummary(null)
+        setAdapterProgress({})
+        try {
+            const result = await window.api.runScrape(adapterIds)
+            setScrapeSummary(result)
+            setScrapeState('pending_commit')
+        } catch (err) {
+            setScrapeError(err instanceof Error ? err.message : String(err))
+            setScrapeState('error')
+        }
+    }
+
+    async function commitScrape(): Promise<void> {
+        setScrapeCommitting(true)
+        try {
+            await window.api.commitScrape()
+            setScrapeState('idle')
+            setScrapeSummary(null)
+        } catch (err) {
+            setScrapeError(err instanceof Error ? err.message : String(err))
+            setScrapeState('error')
+        } finally {
+            setScrapeCommitting(false)
+        }
+    }
+
+    async function discardScrape(): Promise<void> {
+        await window.api.discardScrape()
+        setScrapeState('idle')
+        setScrapeSummary(null)
+    }
 
     function isLocked(item: NavItem): boolean {
         if (!item.lockedBy) return false
@@ -71,6 +116,9 @@ export default function App(): React.ReactElement {
                         >
                             {item.label}
                             {locked && <span className="lock-badge">locked</span>}
+                            {item.id === 'search' && scrapeState === 'pending_commit' && (
+                                <span className="pending-badge" title="Scrape results ready to commit" />
+                            )}
                         </button>
                     )
                 })}
@@ -78,7 +126,19 @@ export default function App(): React.ReactElement {
 
             <main className="content">
                 {view === 'profile' && <Profile />}
-                {view === 'search' && <SearchConfig key={searchNavKey} />}
+                {view === 'search' && (
+                    <SearchConfig
+                        key={searchNavKey}
+                        scrapeState={scrapeState}
+                        summary={scrapeSummary}
+                        adapterProgress={adapterProgress}
+                        errorMsg={scrapeError}
+                        committing={scrapeCommitting}
+                        onRunScrape={(ids) => { runScrape(ids).catch(console.error) }}
+                        onCommit={() => { commitScrape().catch(console.error) }}
+                        onDiscard={() => { discardScrape().catch(console.error) }}
+                    />
+                )}
                 {view === 'jobs' && <JobBoard onNavigateToResume={(posting) => {
                     setPendingNavPosting(posting)
                     setView('resume')

@@ -14,7 +14,7 @@ import {
   saveApiKey,
   deleteApiKey,
 } from './settings'
-import type { FeatureLocks, Settings, SettingKey, BanListEntry, SearchTerm } from '../src/shared/ipc-types'
+import type { FeatureLocks, Settings, SettingKey, BanListEntry, SearchTerm, AddSearchTermData, Application, WorkType, SearchTermSeniority } from '../src/shared/ipc-types'
 import {
   getAllEntries,
   createEntry,
@@ -32,13 +32,12 @@ import { tailorResume } from '../core/resume/agent'
 import { renderTex } from '../core/resume/renderer'
 import { compileTex, recompileFromSnapshot } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
-import type { Application } from '../src/shared/ipc-types'
 import { chromium } from 'playwright'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
 import { getFilteredRankedPostings, getRankedPostings } from '../core/jobs/ranker'
-import { generateSearchTerms } from '../core/jobs/searchTermGen'
+import { generateSearchTerms, generateSearchTermsFromProfile } from '../core/jobs/searchTermGen'
 import { writeLLMUsage } from '../core/jobs/llmUsage'
 import { getTrackerPostings, updatePostingStatus, deletePostings } from '../core/tracker/repository'
 import {
@@ -429,12 +428,13 @@ function registerIpcHandlers(): void {
         schema_version: 1,
         applied_at: null,
         notes: '',
+        name: null,
       }
 
       getDb()
         .prepare(
-          `INSERT INTO applications (id, posting_id, tex_path, resume_json, schema_version, applied_at, notes)
-           VALUES (@id, @posting_id, @tex_path, @resume_json, @schema_version, @applied_at, @notes)`,
+          `INSERT INTO applications (id, posting_id, tex_path, resume_json, schema_version, applied_at, notes, name)
+           VALUES (@id, @posting_id, @tex_path, @resume_json, @schema_version, @applied_at, @notes, @name)`,
         )
         .run(application)
 
@@ -445,6 +445,11 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('resume:get-applications', () => {
     return getDb().prepare('SELECT * FROM applications ORDER BY rowid DESC').all()
+  })
+
+  ipcMain.handle('resume:rename', (_event, applicationId: string, name: string) => {
+    if (typeof applicationId !== 'string' || !applicationId) throw new Error('Invalid applicationId')
+    getDb().prepare('UPDATE applications SET name = ? WHERE id = ?').run(name?.trim() || null, applicationId)
   })
 
   ipcMain.handle('resume:get-templates', () => {
@@ -534,9 +539,15 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('search-terms:get', () => {
     const rows = getDb()
-      .prepare('SELECT * FROM search_terms ORDER BY adapter_id, created_at')
-      .all() as Array<Omit<SearchTerm, 'enabled'> & { enabled: number }>
-    return rows.map((r) => ({ ...r, enabled: r.enabled === 1 }))
+      .prepare('SELECT * FROM search_terms ORDER BY created_at')
+      .all() as Array<Omit<SearchTerm, 'enabled' | 'locations' | 'seniorities' | 'work_type'> & { enabled: number; locations: string | null; seniorities: string | null; work_type: string | null }>
+    return rows.map((r) => ({
+      ...r,
+      enabled: r.enabled === 1,
+      locations: r.locations ? JSON.parse(r.locations) as string[] : null,
+      seniorities: r.seniorities ? JSON.parse(r.seniorities) as SearchTermSeniority[] : null,
+      work_type: r.work_type ? JSON.parse(r.work_type) as WorkType[] : null,
+    }))
   })
 
   ipcMain.handle('search-terms:generate', async () => {
@@ -550,9 +561,26 @@ function registerIpcHandlers(): void {
     return generateSearchTerms(getDb(), key, intent)
   })
 
+  ipcMain.handle('search-terms:generate-from-profile', async () => {
+    const key = getApiKey()
+    if (!key) throw new Error('No API key stored — set one in Settings first')
+    return generateSearchTermsFromProfile(getDb(), key)
+  })
+
   ipcMain.handle(
     'search-terms:update',
-    (_event, { id, updates }: { id: string; updates: { term?: string; enabled?: boolean } }) => {
+    (_event, { id, updates }: {
+      id: string
+      updates: {
+        term?: string
+        enabled?: boolean
+        locations?: string[] | null
+        seniorities?: string[] | null
+        work_type?: string[] | null
+        recency?: string | null
+        max_results?: number | null
+      }
+    }) => {
       if (typeof id !== 'string' || !id) throw new Error('Invalid id')
       const db = getDb()
       if (updates.term !== undefined) {
@@ -564,28 +592,60 @@ function registerIpcHandlers(): void {
           id,
         )
       }
+      if ('locations' in updates) {
+        db.prepare('UPDATE search_terms SET locations = ? WHERE id = ?').run(
+          updates.locations?.length ? JSON.stringify(updates.locations) : null, id)
+      }
+      if ('seniorities' in updates) {
+        db.prepare('UPDATE search_terms SET seniorities = ? WHERE id = ?').run(
+          updates.seniorities?.length ? JSON.stringify(updates.seniorities) : null, id)
+      }
+      if ('work_type' in updates) {
+        db.prepare('UPDATE search_terms SET work_type = ? WHERE id = ?').run(
+          updates.work_type?.length ? JSON.stringify(updates.work_type) : null, id)
+      }
+      if ('recency' in updates) {
+        db.prepare('UPDATE search_terms SET recency = ? WHERE id = ?').run(updates.recency ?? null, id)
+      }
+      if ('max_results' in updates) {
+        db.prepare('UPDATE search_terms SET max_results = ? WHERE id = ?').run(updates.max_results ?? null, id)
+      }
     },
   )
 
   ipcMain.handle(
     'search-terms:add',
-    (_event, { adapterId, term }: { adapterId: string; term: string }) => {
-      if (!term.trim()) throw new Error('Term cannot be empty')
+    (_event, { data }: { data: AddSearchTermData }) => {
+      if (!data.role.trim()) throw new Error('Role cannot be empty')
       const id = randomUUID()
       const now = new Date().toISOString()
       getDb()
         .prepare(
-          `INSERT INTO search_terms (id, adapter_id, term, enabled, source, created_at)
-           VALUES (?, ?, ?, 1, 'user_added', ?)`,
+          `INSERT INTO search_terms
+             (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
+           VALUES (?, ?, 1, 'user_added', ?, ?, ?, ?, ?, ?)`,
         )
-        .run(id, adapterId, term.trim(), now)
+        .run(
+          id,
+          data.role.trim(),
+          now,
+          data.locations?.length ? JSON.stringify(data.locations) : null,
+          data.seniorities?.length ? JSON.stringify(data.seniorities) : null,
+          data.work_type?.length ? JSON.stringify(data.work_type) : null,
+          data.recency ?? null,
+          data.max_results ?? null,
+        )
       const newTerm: SearchTerm = {
         id,
-        adapter_id: adapterId,
-        term: term.trim(),
+        term: data.role.trim(),
         enabled: true,
         source: 'user_added',
         created_at: now,
+        locations: data.locations ?? null,
+        seniorities: data.seniorities ?? null,
+        work_type: data.work_type ?? null,
+        recency: data.recency ?? null,
+        max_results: data.max_results ?? null,
       }
       return newTerm
     },
@@ -593,6 +653,40 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('search-terms:delete', (_event, id: string) => {
     getDb().prepare('DELETE FROM search_terms WHERE id = ?').run(id)
+  })
+
+  // ─── Location suggestions ─────────────────────────────────────────────────
+
+  ipcMain.handle('location:suggest', async (_event, query: string) => {
+    if (typeof query !== 'string' || query.trim().length < 2) return []
+    const q = query.trim()
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1`
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'CareerAid/1.0' },
+        signal: AbortSignal.timeout(4000),
+      })
+      if (!res.ok) throw new Error(`Nominatim ${res.status}`)
+      const data = await res.json() as Array<{ display_name: string }>
+      return data.map((r) => r.display_name).filter(Boolean)
+    } catch {
+      // Offline or error — fall back to a static city list
+      const CITIES = [
+        'New York, NY', 'Los Angeles, CA', 'Chicago, IL', 'San Francisco, CA',
+        'Seattle, WA', 'Austin, TX', 'Boston, MA', 'Denver, CO', 'Atlanta, GA',
+        'Miami, FL', 'Portland, OR', 'San Diego, CA', 'Dallas, TX', 'Houston, TX',
+        'Phoenix, AZ', 'Minneapolis, MN', 'Washington, DC', 'Philadelphia, PA',
+        'London, UK', 'Amsterdam, Netherlands', 'Berlin, Germany', 'Paris, France',
+        'Toronto, Canada', 'Vancouver, Canada', 'Montreal, Canada',
+        'Sydney, Australia', 'Melbourne, Australia', 'Singapore', 'Tokyo, Japan',
+        'Dublin, Ireland', 'Stockholm, Sweden', 'Copenhagen, Denmark',
+        'Zurich, Switzerland', 'Barcelona, Spain', 'Madrid, Spain',
+        'Warsaw, Poland', 'Prague, Czech Republic', 'Lisbon, Portugal',
+        'Remote', 'Worldwide',
+      ]
+      const lower = q.toLowerCase()
+      return CITIES.filter((c) => c.toLowerCase().includes(lower)).slice(0, 6)
+    }
   })
 
   // ─── Ban List ─────────────────────────────────────────────────────────────
@@ -856,12 +950,23 @@ function registerIpcHandlers(): void {
       // Search terms
       if (Array.isArray(payload.search_terms)) {
         const stmt = db.prepare(
-          `INSERT OR IGNORE INTO search_terms (id, adapter_id, term, enabled, source, created_at)
-           VALUES (@id, @adapter_id, @term, @enabled, @source, @created_at)`,
+          `INSERT OR IGNORE INTO search_terms (id, term, enabled, source, created_at, location, seniority, remote, recency, max_results)
+           VALUES (@id, @term, @enabled, @source, @created_at, @location, @seniority, @remote, @recency, @max_results)`,
         )
         for (const t of payload.search_terms as Record<string, unknown>[]) {
-          if (t.id && t.adapter_id && t.term) {
-            stmt.run(t)
+          if (t.id && t.term) {
+            stmt.run({
+              id: t.id,
+              term: t.term,
+              enabled: t.enabled ?? 1,
+              source: t.source ?? 'user_added',
+              created_at: t.created_at ?? new Date().toISOString(),
+              location: t.location ?? null,
+              seniority: t.seniority ?? null,
+              remote: t.remote ? 1 : 0,
+              recency: t.recency ?? null,
+              max_results: t.max_results ?? null,
+            })
             imported++
           }
         }

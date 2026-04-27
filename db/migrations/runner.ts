@@ -7,6 +7,10 @@ import sql005 from './005_safe_storage.sql?raw'
 import sql006 from './006_llm_usage.sql?raw'
 import sql007 from './007_affinity_reasoning.sql?raw'
 import sql008 from './008_applications_nullable_applied_at.sql?raw'
+import sql009 from './009_search_term_conditions.sql?raw'
+import sql010 from './010_search_terms_drop_adapter_id.sql?raw'
+import sql011 from './011_applications_name.sql?raw'
+import sql012 from './012_search_terms_multiselect.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -21,6 +25,10 @@ const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '006_llm_usage.sql', sql: sql006 },
   { filename: '007_affinity_reasoning.sql', sql: sql007 },
   { filename: '008_applications_nullable_applied_at.sql', sql: sql008 },
+  { filename: '009_search_term_conditions.sql', sql: sql009 },
+  { filename: '010_search_terms_drop_adapter_id.sql', sql: sql010 },
+  { filename: '011_applications_name.sql', sql: sql011 },
+  { filename: '012_search_terms_multiselect.sql', sql: sql012 },
 ]
 
 export function runMigrations(

@@ -9,9 +9,14 @@ import type {
   PostingStatus,
   SearchConfigRow,
   SearchTerm,
+  AddSearchTermData,
   BanListEntry,
   JobPosting,
   AdapterProgress,
+  ProfileEntry,
+  WorkType,
+  SearchTermSeniority,
+  Recency,
 } from '../src/shared/ipc-types'
 
 contextBridge.exposeInMainWorld('api', {
@@ -79,7 +84,7 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('profile:import')
   },
 
-  importProfileFromResumePdf(): Promise<{ added: number; entries: unknown[] } | null> {
+  importProfileFromResumePdf(): Promise<{ added: number; entries: ProfileEntry[] } | null> {
     return ipcRenderer.invoke('profile:import-resume-pdf')
   },
 
@@ -100,6 +105,10 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('resume:recompile', applicationId)
   },
 
+  renameResume(applicationId: string, name: string): Promise<void> {
+    return ipcRenderer.invoke('resume:rename', applicationId, name)
+  },
+
   // ── Search Config ──────────────────────────────────────────────────────────
   getSearchConfig(): Promise<SearchConfigRow> {
     return ipcRenderer.invoke('search:get-config')
@@ -118,16 +127,32 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('search-terms:generate')
   },
 
-  updateSearchTerm(id: string, updates: { term?: string; enabled?: boolean }): Promise<void> {
+  generateSearchTermsFromProfile(): Promise<SearchTerm[]> {
+    return ipcRenderer.invoke('search-terms:generate-from-profile')
+  },
+
+  updateSearchTerm(id: string, updates: {
+    term?: string
+    enabled?: boolean
+    locations?: string[] | null
+    seniorities?: SearchTermSeniority[] | null
+    work_type?: WorkType[] | null
+    recency?: Recency | null
+    max_results?: number | null
+  }): Promise<void> {
     return ipcRenderer.invoke('search-terms:update', { id, updates })
   },
 
-  addSearchTerm(adapterId: string, term: string): Promise<SearchTerm> {
-    return ipcRenderer.invoke('search-terms:add', { adapterId, term })
+  addSearchTerm(data: AddSearchTermData): Promise<SearchTerm> {
+    return ipcRenderer.invoke('search-terms:add', { data })
   },
 
   deleteSearchTerm(id: string): Promise<void> {
     return ipcRenderer.invoke('search-terms:delete', id)
+  },
+
+  suggestLocations(query: string): Promise<string[]> {
+    return ipcRenderer.invoke('location:suggest', query)
   },
 
   // ── Ban List ───────────────────────────────────────────────────────────────

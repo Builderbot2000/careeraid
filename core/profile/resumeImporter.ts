@@ -73,7 +73,6 @@ export async function importProfileFromResumePdf(
         role: 'user',
         content: [
           {
-            // @ts-expect-error — 'document' content type supported at runtime; SDK typings may lag
             type: 'document',
             source: {
               type: 'base64',

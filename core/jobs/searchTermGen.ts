@@ -1,37 +1,44 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import Database from 'better-sqlite3'
-import type { SearchTerm } from '../../src/shared/ipc-types'
+import type { SearchTerm, SearchTermSeniority, Recency } from '../../src/shared/ipc-types'
 import { writeLLMUsage } from './llmUsage'
+import { getAllEntries } from '../profile/repository'
+import type { ProfileEntry } from '../profile/models'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5'
 
-// Adapter list for search term generation.
-// Extend this array when real adapters are added.
-const ADAPTER_IDS = ['mock']
-
-interface RawTermSet {
-  adapter_id: string
-  terms: string[]
+interface RawStructuredTerm {
+  role: string
+  location?: string | null
+  seniority?: string | null
+  remote?: boolean
+  recency?: string | null
 }
 
-function buildPrompt(intent: string, adapterIds: string[]): string {
-  return `You are a job search assistant. Given the user's job search intent, generate a list of effective search query strings for each job board adapter listed.
+const VALID_SENIORITIES = new Set(['intern', 'junior', 'mid', 'senior', 'staff'])
+const VALID_RECENCIES = new Set(['day', 'week', 'month'])
+
+function buildPrompt(intent: string): string {
+  return `You are a job search assistant. Given the user's job search intent, generate a list of structured search terms.
 
 User intent: "${intent}"
 
-Adapters: ${adapterIds.join(', ')}
-
 Return ONLY a valid JSON array with this exact shape — no markdown, no commentary:
 [
-  { "adapter_id": "mock", "terms": ["senior backend engineer", "staff software engineer TypeScript", "..."] }
+  { "role": "senior backend engineer", "location": "San Francisco, CA", "seniority": "senior", "remote": false, "recency": "week" },
+  { "role": "staff software engineer TypeScript", "location": null, "seniority": "staff", "remote": true, "recency": null }
 ]
 
 Rules:
-- 3–6 terms per adapter
-- Terms should be specific enough to return relevant results on a job board search field
-- Vary phrasing (job title variations, tech keywords, seniority levels)
-- No duplicates within an adapter`
+- 3–6 terms total
+- "role" is a concise job title or keyword phrase for a job board search field
+- "location" is a city/region string or null for no location filter
+- "seniority" is one of: intern, junior, mid, senior, staff — or null for any
+- "remote" is true or false
+- "recency" is one of: day, week, month — or null for no time filter
+- Vary role phrasing (job title variations, tech keywords, seniority levels)
+- No duplicate roles`
 }
 
 export async function generateSearchTerms(
@@ -44,7 +51,7 @@ export async function generateSearchTerms(
   const response = await client.messages.create({
     model: DEFAULT_MODEL,
     max_tokens: 1024,
-    messages: [{ role: 'user', content: buildPrompt(intent, ADAPTER_IDS) }],
+    messages: [{ role: 'user', content: buildPrompt(intent) }],
   })
 
   // Write LLM usage
@@ -59,19 +66,20 @@ export async function generateSearchTerms(
   // Parse response
   const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
   const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-  let termSets: RawTermSet[]
+  let rawTerms: RawStructuredTerm[]
   try {
     const parsed = JSON.parse(text)
     if (!Array.isArray(parsed)) throw new Error('Expected array')
-    termSets = parsed as RawTermSet[]
+    rawTerms = parsed as RawStructuredTerm[]
   } catch {
     throw new Error(`Failed to parse search term response: ${raw.slice(0, 200)}`)
   }
 
   // Delete existing llm_generated terms and replace
   const insertStmt = db.prepare(
-    `INSERT INTO search_terms (id, adapter_id, term, enabled, source, created_at)
-     VALUES (@id, @adapter_id, @term, 1, 'llm_generated', @created_at)`,
+    `INSERT INTO search_terms
+       (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
+     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, NULL)`,
   )
   const now = new Date().toISOString()
 
@@ -80,21 +88,137 @@ export async function generateSearchTerms(
   db.transaction(() => {
     db.prepare(`DELETE FROM search_terms WHERE source = 'llm_generated'`).run()
 
-    for (const set of termSets) {
-      if (!set.adapter_id || !Array.isArray(set.terms)) continue
-      for (const term of set.terms) {
-        if (typeof term !== 'string' || !term.trim()) continue
-        const id = randomUUID()
-        insertStmt.run({ id, adapter_id: set.adapter_id, term: term.trim(), created_at: now })
-        inserted.push({
-          id,
-          adapter_id: set.adapter_id,
-          term: term.trim(),
-          enabled: true,
-          source: 'llm_generated',
-          created_at: now,
-        })
-      }
+    for (const t of rawTerms) {
+      if (typeof t.role !== 'string' || !t.role.trim()) continue
+      const role = t.role.trim()
+      const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
+      const locations = location ? JSON.stringify([location]) : null
+      const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
+      const seniorities = seniority ? JSON.stringify([seniority]) : null
+      // LLM generates remote=true → work_type=['remote'], remote=false → null
+      const work_type = t.remote === true ? JSON.stringify(['remote']) : null
+      const recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+      const id = randomUUID()
+      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency })
+      inserted.push({
+        id,
+        term: role,
+        enabled: true,
+        source: 'llm_generated',
+        created_at: now,
+        locations: location ? [location] : null,
+        seniorities: seniority ? [seniority] : null,
+        work_type: work_type ? JSON.parse(work_type) as Array<'remote'|'hybrid'|'onsite'> : null,
+        recency,
+        max_results: null,
+      })
+    }
+  })()
+
+  return inserted
+}
+
+// ─── Profile-based generation ─────────────────────────────────────────────────
+
+function buildPromptFromProfile(entries: ProfileEntry[]): string {
+  const formatted = entries
+    .map((e) => `[${e.type}] ${e.title}\n${e.content}`)
+    .join('\n\n')
+
+  return `You are a job search assistant. Based on the user's professional profile below, generate a list of structured job search terms that best match their background.
+
+Profile:
+${formatted}
+
+Return ONLY a valid JSON array with this exact shape — no markdown, no commentary:
+[
+  { "role": "senior backend engineer", "location": null, "seniority": "senior", "remote": true, "recency": "week" },
+  { "role": "staff software engineer TypeScript", "location": null, "seniority": "staff", "remote": true, "recency": null }
+]
+
+Rules:
+- 3–6 terms total
+- "role" is a concise job title or keyword phrase derived from the profile's experience and skills
+- "location" is a city/region string or null for no location filter
+- "seniority" is one of: intern, junior, mid, senior, staff — or null for any
+- "remote" is true or false
+- "recency" is one of: day, week, month — or null for no time filter
+- Vary role phrasing (job title variations, tech keywords, seniority levels)
+- No duplicate roles`
+}
+
+export async function generateSearchTermsFromProfile(
+  db: Database.Database,
+  apiKey: string,
+): Promise<SearchTerm[]> {
+  const allEntries = getAllEntries(db)
+  const entries = allEntries.filter((e) => e.type === 'experience' || e.type === 'skill')
+  if (entries.length === 0) {
+    throw new Error('No experience or skill entries in your profile — add some first')
+  }
+
+  const client = new Anthropic({ apiKey })
+
+  const response = await client.messages.create({
+    model: DEFAULT_MODEL,
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: buildPromptFromProfile(entries) }],
+  })
+
+  writeLLMUsage(db, {
+    call_type: 'search_term_gen',
+    model: DEFAULT_MODEL,
+    input_tokens: response.usage.input_tokens,
+    output_tokens: response.usage.output_tokens,
+    posting_id: null,
+  })
+
+  const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
+  const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+  let rawTerms: RawStructuredTerm[]
+  try {
+    const parsed = JSON.parse(text)
+    if (!Array.isArray(parsed)) throw new Error('Expected array')
+    rawTerms = parsed as RawStructuredTerm[]
+  } catch {
+    throw new Error(`Failed to parse search term response: ${raw.slice(0, 200)}`)
+  }
+
+  const insertStmt = db.prepare(
+    `INSERT INTO search_terms
+       (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
+     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, NULL)`,
+  )
+  const now = new Date().toISOString()
+
+  const inserted: SearchTerm[] = []
+
+  db.transaction(() => {
+    db.prepare(`DELETE FROM search_terms WHERE source = 'llm_generated'`).run()
+
+    for (const t of rawTerms) {
+      if (typeof t.role !== 'string' || !t.role.trim()) continue
+      const role = t.role.trim()
+      const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
+      const locations = location ? JSON.stringify([location]) : null
+      const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
+      const seniorities = seniority ? JSON.stringify([seniority]) : null
+      const work_type = t.remote === true ? JSON.stringify(['remote']) : null
+      const recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+      const id = randomUUID()
+      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency })
+      inserted.push({
+        id,
+        term: role,
+        enabled: true,
+        source: 'llm_generated',
+        created_at: now,
+        locations: location ? [location] : null,
+        seniorities: seniority ? [seniority] : null,
+        work_type: work_type ? JSON.parse(work_type) as Array<'remote'|'hybrid'|'onsite'> : null,
+        recency,
+        max_results: null,
+      })
     }
   })()
 

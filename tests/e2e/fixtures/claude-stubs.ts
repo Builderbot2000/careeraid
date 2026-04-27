@@ -8,9 +8,9 @@ import type { SearchTerm } from '../../../src/shared/ipc-types'
 // ─── Search term generation stub ─────────────────────────────────────────────
 
 export const STUB_SEARCH_TERMS: Omit<SearchTerm, 'id' | 'created_at'>[] = [
-  { adapter_id: 'mock', term: 'senior backend engineer remote', enabled: true, source: 'llm_generated' },
-  { adapter_id: 'mock', term: 'staff engineer typescript', enabled: true, source: 'llm_generated' },
-  { adapter_id: 'mock', term: 'platform engineer go kubernetes', enabled: true, source: 'llm_generated' },
+  { term: 'senior backend engineer remote', enabled: true, source: 'llm_generated', locations: null, seniorities: null, work_type: null, recency: null, max_results: null },
+  { term: 'staff engineer typescript', enabled: true, source: 'llm_generated', locations: null, seniorities: null, work_type: null, recency: null, max_results: null },
+  { term: 'platform engineer go kubernetes', enabled: true, source: 'llm_generated', locations: null, seniorities: null, work_type: null, recency: null, max_results: null },
 ]
 
 // ─── Resume tailor stub ───────────────────────────────────────────────────────

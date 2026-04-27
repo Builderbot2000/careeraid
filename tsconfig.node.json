@@ -11,6 +11,9 @@
     "core/**/*",
     "db/**/*",
     "scripts/**/*",
-    "src/shared/**/*"
+    "src/shared/**/*",
+    "tests/stubs-main.ts",
+    "tests/e2e/fixtures/**/*",
+    "tests/integration/**/*"
   ]
 }

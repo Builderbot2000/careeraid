@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
-import type { JobPosting } from './adapters/base'
+import type { JobPosting, SearchFilters } from './adapters/base'
 import type { BaseAdapter } from './adapters/base'
 import type { AdapterProgress, ScrapeSummary } from '../../src/shared/ipc-types'
 
@@ -146,20 +146,77 @@ export async function runScrape(
   let fetched = 0
   let dupes = 0
 
+  // Load all enabled terms once — they are adapter-global.
+  type TermRow = {
+    term: string
+    locations: string | null
+    seniorities: string | null
+    work_type: string | null
+    recency: string | null
+    max_results: number | null
+  }
+  const allTermRows = db
+    .prepare('SELECT term, locations, seniorities, work_type, recency, max_results FROM search_terms WHERE enabled = 1')
+    .all() as TermRow[]
+
+  // Expand each term into one run per location (or one run if no locations).
+  type ExpandedRun = {
+    term: string
+    location: string | undefined
+    seniorities: SearchFilters['seniorities']
+    workTypes: SearchFilters['workTypes']
+    recency: SearchFilters['recency']
+    maxResults: number | undefined
+  }
+
+  function parseJsonArr<T>(raw: string | null): T[] | undefined {
+    if (!raw) return undefined
+    try {
+      const v = JSON.parse(raw)
+      return Array.isArray(v) && v.length ? v as T[] : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  const expandedRuns: ExpandedRun[] = []
+  const termSource = allTermRows.length > 0
+    ? allTermRows
+    : [{ term: '', locations: null, seniorities: null, work_type: null, recency: null, max_results: null }]
+
+  for (const row of termSource) {
+    const locs = parseJsonArr<string>(row.locations)
+    const seniorities = parseJsonArr<'intern'|'junior'|'mid'|'senior'|'staff'>(row.seniorities)
+    const workTypes = parseJsonArr<'remote'|'hybrid'|'onsite'>(row.work_type)
+    const recency = (row.recency ?? undefined) as SearchFilters['recency']
+    const maxResults = row.max_results ?? undefined
+    if (locs && locs.length > 0) {
+      for (const loc of locs) {
+        expandedRuns.push({ term: row.term, location: loc, seniorities, workTypes, recency, maxResults })
+      }
+    } else {
+      expandedRuns.push({ term: row.term, location: undefined, seniorities, workTypes, recency, maxResults })
+    }
+  }
+
   for (const adapter of adapters) {
-    const termRows = db
-      .prepare('SELECT term FROM search_terms WHERE adapter_id = ? AND enabled = 1')
-      .all(adapter.id) as { term: string }[]
-    const searchTerms = termRows.length > 0 ? termRows.map((r) => r.term) : ['']
+    const searchTerms = expandedRuns
 
     onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
     let adapterFetched = 0
     let hadError = false
 
-    for (const term of searchTerms) {
+    for (const run of searchTerms) {
+      const filters: SearchFilters = {}
+      if (run.location) filters.location = run.location
+      if (run.seniorities) filters.seniorities = run.seniorities
+      if (run.workTypes) filters.workTypes = run.workTypes
+      if (run.recency) filters.recency = run.recency
+      if (run.maxResults != null) filters.maxResults = run.maxResults
+
       let postings: Awaited<ReturnType<typeof adapter.search>>
       try {
-        postings = await adapter.search(term, {}, () => {
+        postings = await adapter.search(run.term, filters, () => {
           adapterFetched++
           onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
         })

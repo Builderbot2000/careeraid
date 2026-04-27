@@ -19,6 +19,8 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
     const [recompiling, setRecompiling] = useState(false)
     const [postingId, setPostingId] = useState<string | undefined>(initialPosting?.id)
     const [applied, setApplied] = useState(false)
+    const [editingNameId, setEditingNameId] = useState<string | null>(null)
+    const [editingNameValue, setEditingNameValue] = useState('')
     const iframeRef = useRef<HTMLIFrameElement>(null)
 
     // When a posting is navigated in from the Job Board, pre-fill the JD textarea
@@ -80,6 +82,14 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
         setPdfUrl(null)
         setErrorMsg(null)
         setApplied(false)
+    }
+
+    async function handleRenameBlur(app: Application): Promise<void> {
+        const newName = editingNameValue.trim()
+        setEditingNameId(null)
+        await window.api.renameResume(app.id, newName)
+        setApplications((prev) => prev.map((a) => a.id === app.id ? { ...a, name: newName || null } : a))
+        if (currentApp?.id === app.id) setCurrentApp((a) => a ? { ...a, name: newName || null } : a)
     }
 
     async function handleApply(): Promise<void> {
@@ -186,15 +196,39 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                                         display: 'flex',
                                         justifyContent: 'space-between',
                                         alignItems: 'center',
+                                        gap: '4px',
                                     }}
                                 >
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {app.id.slice(0, 8)}… {app.applied_at ? `• Applied ${app.applied_at.slice(0, 10)}` : ''}
-                                    </span>
+                                    {editingNameId === app.id ? (
+                                        <input
+                                            autoFocus
+                                            value={editingNameValue}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => setEditingNameValue(e.target.value)}
+                                            onBlur={() => handleRenameBlur(app)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                                                if (e.key === 'Escape') { setEditingNameId(null) }
+                                            }}
+                                            style={{ flex: 1, fontSize: '0.8rem', padding: '1px 4px', fontFamily: 'inherit' }}
+                                        />
+                                    ) : (
+                                        <span
+                                            title="Click to rename"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setEditingNameId(app.id)
+                                                setEditingNameValue(app.name ?? '')
+                                            }}
+                                            style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'text' }}
+                                        >
+                                            {app.name ?? `${app.id.slice(0, 8)}…`}{app.applied_at ? ` • Applied ${app.applied_at.slice(0, 10)}` : ''}
+                                        </span>
+                                    )}
                                     <button
                                         onClick={(e) => { e.stopPropagation(); handleRecompile(app.id) }}
                                         disabled={recompiling}
-                                        style={{ fontSize: '0.7rem', padding: '2px 6px', cursor: 'pointer' }}
+                                        style={{ fontSize: '0.7rem', padding: '2px 6px', cursor: 'pointer', flexShrink: 0 }}
                                     >
                                         {recompiling && currentApp?.id === app.id ? '…' : 'PDF'}
                                     </button>

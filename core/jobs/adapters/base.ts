@@ -90,7 +90,10 @@ export function rowToPosting(row: JobPostingRow): JobPosting {
 
 export interface SearchFilters {
   location?: string
-  remote?: boolean
+  seniorities?: Array<'intern' | 'junior' | 'mid' | 'senior' | 'staff'>
+  workTypes?: Array<'remote' | 'hybrid' | 'onsite'>
+  recency?: 'day' | 'week' | 'month'
+  maxResults?: number
 }
 
 export abstract class BaseAdapter {

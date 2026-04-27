@@ -436,9 +436,10 @@ export class MockAdapter extends BaseAdapter {
     onPosting?: () => void,
   ): Promise<Omit<JobPosting, 'id'>[]> {
     const now = new Date().toISOString()
-    const count =
+    const rawCount =
       RESULTS_PER_CRAWL_MIN +
       Math.floor(Math.random() * (RESULTS_PER_CRAWL_MAX - RESULTS_PER_CRAWL_MIN + 1))
+    const count = _filters.maxResults != null ? Math.min(rawCount, _filters.maxResults) : rawCount
 
     // Fisher-Yates shuffle, take first `count`
     const pool = MOCK_POOL.slice()

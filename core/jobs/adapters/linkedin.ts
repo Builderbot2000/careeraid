@@ -54,11 +54,39 @@ export const KNOWN_TECH: string[] = [
 
 // ─── URL helpers ──────────────────────────────────────────────────────────────
 
+const SENIORITY_MAP: Record<string, string> = {
+  intern: '1',
+  junior: '2',
+  mid: '3',
+  senior: '4',
+  staff: '5',
+}
+
+const WORK_TYPE_MAP: Record<string, string> = {
+  onsite: '1',
+  remote: '2',
+  hybrid: '3',
+}
+
+const RECENCY_MAP: Record<string, string> = {
+  day: 'r86400',
+  week: 'r604800',
+  month: 'r2592000',
+}
+
 export function buildSearchUrl(term: string, filters: SearchFilters, start: number): string {
   const params = new URLSearchParams()
   if (term) params.set('keywords', term)
   if (filters.location) params.set('location', filters.location)
-  if (filters.remote) params.set('f_WT', '2')
+  if (filters.seniorities?.length) {
+    const codes = filters.seniorities.map((s) => SENIORITY_MAP[s]).filter(Boolean)
+    if (codes.length) params.set('f_E', codes.join(','))
+  }
+  if (filters.workTypes?.length) {
+    const codes = filters.workTypes.map((w) => WORK_TYPE_MAP[w]).filter(Boolean)
+    if (codes.length) params.set('f_WT', codes.join(','))
+  }
+  if (filters.recency && RECENCY_MAP[filters.recency]) params.set('f_TPR', RECENCY_MAP[filters.recency])
   params.set('start', String(start))
   return `https://www.linkedin.com/jobs/search/?${params.toString()}`
 }
@@ -235,9 +263,12 @@ export class LinkedInAdapter extends BaseAdapter {
     const results: Omit<JobPosting, 'id'>[] = []
     let consecutiveFails = 0
     const now = new Date().toISOString()
+    const pageLimit = filters.maxResults != null
+      ? Math.min(Math.ceil(filters.maxResults / PAGE_SIZE), MAX_PAGES)
+      : MAX_PAGES
 
     try {
-      for (let pageNum = 0; pageNum < MAX_PAGES; pageNum++) {
+      for (let pageNum = 0; pageNum < pageLimit; pageNum++) {
         const url = buildSearchUrl(term, filters, pageNum * PAGE_SIZE)
         await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
 
@@ -318,6 +349,8 @@ export class LinkedInAdapter extends BaseAdapter {
 
           onPosting?.()
           consecutiveFails = 0
+
+          if (filters.maxResults != null && results.length >= filters.maxResults) return results
         }
 
         // Fewer cards than expected means we've reached the last page.

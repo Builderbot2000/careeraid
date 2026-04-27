@@ -41,9 +41,28 @@ export function registerTestStubs(): void {
     for (const t of STUB_SEARCH_TERMS) {
       const id = randomUUID()
       db.prepare(
-        `INSERT INTO search_terms (id, adapter_id, term, enabled, source, created_at)
-         VALUES (?, ?, ?, 1, 'llm_generated', ?)`,
-      ).run(id, t.adapter_id, t.term, now)
+        `INSERT INTO search_terms (id, term, enabled, source, created_at)
+         VALUES (?, ?, 1, 'llm_generated', ?)`,
+      ).run(id, t.term, now)
+      inserted.push({ ...t, id, created_at: now })
+    }
+    return inserted
+  })
+
+  // ─── Search term generation from profile ────────────────────────────────────
+  ipcMain.handle('search-terms:generate-from-profile', () => {
+    const db = getDb()
+    const now = new Date().toISOString()
+
+    db.prepare("DELETE FROM search_terms WHERE source = 'llm_generated'").run()
+
+    const inserted: SearchTerm[] = []
+    for (const t of STUB_SEARCH_TERMS) {
+      const id = randomUUID()
+      db.prepare(
+        `INSERT INTO search_terms (id, term, enabled, source, created_at)
+         VALUES (?, ?, 1, 'llm_generated', ?)`,
+      ).run(id, t.term, now)
       inserted.push({ ...t, id, created_at: now })
     }
     return inserted

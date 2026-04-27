@@ -13,7 +13,7 @@ test.describe('Job Aggregation Module', () => {
 
     test('generates suggested terms via AI and they appear tagged as AI', async ({ page }) => {
       await goTo(page, 'Search Config')
-      await page.getByRole('button', { name: /Generate via AI/i }).click()
+      await page.getByRole('button', { name: /Generate from Intent/i }).click()
       // Stub returns 3 terms; wait for them to appear
       await expect(page.getByText(/senior backend engineer remote/i)).toBeVisible({ timeout: 10_000 })
       // All stub terms should be tagged as AI-generated

@@ -48,7 +48,7 @@ describe('buildSearchUrl', () => {
   })
 
   it('includes f_WT=2 for remote filter', () => {
-    const url = buildSearchUrl('engineer', { remote: true }, 0)
+    const url = buildSearchUrl('engineer', { workTypes: ['remote'] }, 0)
     expect(url).toContain('f_WT=2')
   })
 
@@ -58,7 +58,7 @@ describe('buildSearchUrl', () => {
   })
 
   it('includes all params when all filters are set', () => {
-    const url = buildSearchUrl('engineer', { location: 'NYC', remote: true }, 50)
+    const url = buildSearchUrl('engineer', { location: 'NYC', workTypes: ['remote'] }, 50)
     expect(url).toContain('keywords=engineer')
     expect(url).toContain('location=NYC')
     expect(url).toContain('f_WT=2')
