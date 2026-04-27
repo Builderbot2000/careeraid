@@ -50,6 +50,9 @@
   "build": {
     "appId": "com.careerindex.app",
     "productName": "Career Index",
+    "publish": {
+      "provider": "github"
+    },
     "directories": {
       "output": "dist"
     },
