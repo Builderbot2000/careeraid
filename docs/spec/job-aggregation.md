@@ -20,38 +20,43 @@ parent: Specifications
 
 ## Search Term Creation
 
-- Users can hard-define a search term by selecting each field (role, location, seniority) via structured UI controls and submitting it directly to their term bank.
-- Users can optionally enter a free-text soft intent and click **Suggest** to generate a list of recommended terms derived from their profile and the intent.
-- Clicking a suggested term adds it to the term bank; suggestions are not added automatically.
-- AI calls for suggestion generation are tracked.
+- Users can hard-define a search term via a structured form with the following fields: role (text), locations (multi-select with autocomplete suggestions), seniorities (multi-select: intern / junior / mid / senior / staff), work type (multi-select: remote / hybrid / onsite), recency (day / week / month), and max results.
+- The location input offers debounced autocomplete suggestions fetched from the backend as the user types.
+- AI generation is available in two modes:
+  - **Generate from Intent** — uses the saved free-text intent to produce terms via Claude.
+  - **Generate from Profile** — reads the user's experience and skill entries and infers appropriate search terms via Claude without requiring a manually written intent.
+- Both generation modes replace all existing LLM-generated terms immediately; generated terms are committed to the term bank directly without a separate confirmation step.
+- AI calls for search term generation are tracked.
 
 ---
 
 ## Search Term Management
 
 - Users can view, enable/disable, edit, and delete individual terms in their term bank.
-- Each term records whether it was hand-defined or AI-suggested.
-- Search terms are stored in a canonical format (role, location, seniority, and any additional structured fields); each adapter maps this format to its own query syntax via a required interface method.
+- Each term records whether it was hand-defined (`user_added`) or AI-generated (`llm_generated`).
+- Search terms are **adapter-global** — there is no per-term adapter binding; every enabled adapter receives all enabled terms and maps the canonical fields to its own query syntax.
+- Editing a term opens the same structured form used for creation; all fields (role, locations, seniorities, work type, recency, max results) can be updated.
 
 ---
 
 ## Adapters
 
 - Each source adapter is a self-contained module with a standardized search interface.
-- Adapters are discovered at startup.
+- Adapters are queried at startup via `listAdapters()`; each reports an id, display name, description, and whether it is currently available.
 - Each adapter declares an inter-request delay and the set of signals it can provide (e.g. recency, applicant count).
-- The mock adapter is always available and returns deterministic postings for development and testing.
-- Some adapters can handle authentication walls by opening a dedicated browser window for the user to complete authentication; the session is saved and reused on future crawls.
-- HackerNews is scraped via its public API without authentication.
-- RSS-based sources (RemoteOK, Wellfound, and generic job feeds) are supported.
+- The **mock adapter** is always available and returns deterministic postings for development and testing.
+- The **LinkedIn adapter** scrapes LinkedIn Jobs using Playwright (headless Chromium), applying the full structured search term (location, seniority, work type, recency, max results) to the query URL. It fires a progress callback after each successfully parsed posting.
+- Unavailable adapters are shown in the adapter selection list but cannot be selected for a scrape run.
 
 ---
 
 ## Scrape Execution
 
 - Users initiate a crawl from the Search Configuration view after reviewing and confirming their search terms.
-- Scraping runs with a configurable inter-request delay (default: 3000 ms) to avoid rate-limiting.
-- The UI displays a live crawl progress panel showing each adapter's status (pending, running, done, aborted), postings collected so far, and any per-adapter errors or abort reasons.
+- Before running, the user selects which adapters to include; unavailable adapters and the mock adapter are excluded from the default selection.
+- Scraping runs with a configurable inter-request delay per adapter (default for LinkedIn: 3000 ms) to avoid rate-limiting.
+- If a `max_results` value is set on a search term, the adapter stops fetching once that many postings have been collected for that term.
+- The UI displays a live crawl progress panel with per-adapter status (`running`, `done`, `error`) and a running count of postings fetched so far, updated in real time per posting via push events.
 - All postings fetched by all adapters are accumulated in a staging buffer; no database writes occur during scraping.
 - Each posting is validated at the aggregator boundary.
 - A posting failing validation is logged and skipped; it is never written to the database, but the failure is displayed in the UI.

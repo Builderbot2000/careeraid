@@ -29,6 +29,9 @@ parent: Specifications
 
 ## Affinity Scoring (Stage 2)
 
+- The job board uses a **two-path ranking model**:
+  - **Fast path** (`getFilteredRankedPostings`): returns postings with already-cached affinity scores immediately on load, with no API call.
+  - **Slow path** (`getRankedPostings`): runs Claude scoring for any unscored postings; the job board live-updates as new scores arrive via the `onAffinityUpdated` push event.
 - Postings passing hard filters that have not yet been scored are sent to Claude in batches for affinity scoring.
 - Batches are assembled based on a configurable token budget (default: 80,000 tokens).
 - Scoring calls are sequential; no concurrent AI requests are made.
@@ -60,3 +63,6 @@ parent: Specifications
 - Clicking a posting's title opens the original URL in the default browser and marks the posting as `viewed` if it was `new`.
 - A keyboard shortcut is available to open the posting URL from the job board row without navigating away.
 - **Tailor Resume** action is available per posting.
+- Each row has a **checkbox** for multi-selection. A header checkbox selects/deselects the entire current page (with indeterminate state when partially selected).
+- When one or more rows are selected, a **Delete (N)** button appears; confirming it permanently deletes the selected postings.
+- The status control shows a **dropdown** with all valid statuses and a **quick-advance arrow button** (→ next status) for the most common forward transition, so the user can advance status in one click.

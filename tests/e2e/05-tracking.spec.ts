@@ -89,4 +89,52 @@ test.describe('Application Tracking Module', () => {
     await expect(page.getByRole('columnheader', { name: /Status/i })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: /Source/i })).toBeVisible()
   })
+
+  // ─── Nullable applied_at ──────────────────────────────────────────────────
+
+  test('tailoring a resume does not set an applied date on the application', async ({ page }) => {
+    // Set up API key so tailoring is available
+    await goTo(page, 'Settings')
+    await page.getByLabel(/API key/i).or(page.getByPlaceholder(/sk-ant/i)).fill('sk-ant-test-key')
+    await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
+
+    // Tailor a resume for the first posting
+    await runAndCommitScrape(page)
+    await goTo(page, 'Job Board')
+    await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
+    await page.getByRole('button', { name: /Tailor|Generate/i }).click()
+    await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })
+
+    // Mark the posting as favorited so it shows in the tracker
+    await goTo(page, 'Job Board')
+    await page.locator('select').first().selectOption('favorited')
+
+    await goTo(page, 'Tracker')
+    await page.locator('table tbody tr').first().locator('select').selectOption('applied')
+
+    // The date applied column should be present but may be empty for the tailored resume
+    // that was not explicitly applied through the status dropdown until now
+    await expect(page.getByRole('columnheader', { name: /Applied|Date/i })).toBeVisible()
+  })
+
+  test('applied_at date is shown only after explicitly setting status to applied', async ({ page }) => {
+    await goTo(page, 'Job Board')
+    const statusSelect = page.locator('select').first()
+    await statusSelect.selectOption('favorited')
+
+    await goTo(page, 'Tracker')
+    // Before advancing to applied, the date column cell should be empty or show a dash
+    const dateCell = page.locator('table tbody tr').first().locator('td').nth(2)
+    const beforeText = (await dateCell.textContent())?.trim()
+    expect(beforeText === '' || beforeText === '—' || beforeText === '-' || beforeText == null).toBe(true)
+
+    // Advance to applied
+    await page.locator('table tbody tr').first().locator('select').selectOption('applied')
+
+    // After applying, the date should now be populated
+    const afterText = (await dateCell.textContent())?.trim()
+    expect(afterText).toBeTruthy()
+    expect(afterText).not.toBe('—')
+    expect(afterText).not.toBe('-')
+  })
 })

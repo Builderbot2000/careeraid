@@ -37,3 +37,4 @@ Application tracking is limited to favorited postings. Postings that have not be
 
 - The application management view is a paginated table (default page size: 50) showing all postings in `applied`-or-later states.
 - Columns: company, role, date applied, status, source, link to original posting.
+- The `applied_at` date is nullable; tailoring a resume does not record an applied date. The date is set when the user explicitly marks the posting as `applied`.

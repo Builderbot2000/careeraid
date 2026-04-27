@@ -259,3 +259,79 @@ describe('extractTechStack', () => {
     expect(result).toContain('PostgreSQL')
   })
 })
+
+// ─── buildSearchUrl — seniority / work-type / recency filters ─────────────────
+
+describe('buildSearchUrl — new structured filters', () => {
+  it('sets f_E=4 for senior seniority', () => {
+    const url = buildSearchUrl('engineer', { seniorities: ['senior'] }, 0)
+    expect(url).toContain('f_E=4')
+  })
+
+  it('sets f_E=1 for intern seniority', () => {
+    const url = buildSearchUrl('engineer', { seniorities: ['intern'] }, 0)
+    expect(url).toContain('f_E=1')
+  })
+
+  it('sets f_E=2%2C4 (comma-joined) for multiple seniorities', () => {
+    const url = buildSearchUrl('engineer', { seniorities: ['junior', 'senior'] }, 0)
+    // URL-encoded comma → %2C, or plain comma depending on URLSearchParams behaviour
+    const decoded = decodeURIComponent(url)
+    expect(decoded).toContain('f_E=2,4')
+  })
+
+  it('omits f_E when seniorities array is empty', () => {
+    const url = buildSearchUrl('engineer', { seniorities: [] }, 0)
+    expect(url).not.toContain('f_E')
+  })
+
+  it('sets f_WT=3 for hybrid work type', () => {
+    const url = buildSearchUrl('engineer', { workTypes: ['hybrid'] }, 0)
+    expect(url).toContain('f_WT=3')
+  })
+
+  it('sets f_WT=1 for onsite work type', () => {
+    const url = buildSearchUrl('engineer', { workTypes: ['onsite'] }, 0)
+    expect(url).toContain('f_WT=1')
+  })
+
+  it('sets comma-joined f_WT for multiple work types', () => {
+    const url = buildSearchUrl('engineer', { workTypes: ['remote', 'hybrid'] }, 0)
+    const decoded = decodeURIComponent(url)
+    expect(decoded).toContain('f_WT=2,3')
+  })
+
+  it('sets f_TPR=r86400 for recency=day', () => {
+    const url = buildSearchUrl('engineer', { recency: 'day' }, 0)
+    expect(url).toContain('f_TPR=r86400')
+  })
+
+  it('sets f_TPR=r604800 for recency=week', () => {
+    const url = buildSearchUrl('engineer', { recency: 'week' }, 0)
+    expect(url).toContain('f_TPR=r604800')
+  })
+
+  it('sets f_TPR=r2592000 for recency=month', () => {
+    const url = buildSearchUrl('engineer', { recency: 'month' }, 0)
+    expect(url).toContain('f_TPR=r2592000')
+  })
+
+  it('omits f_TPR when recency is absent', () => {
+    const url = buildSearchUrl('engineer', {}, 0)
+    expect(url).not.toContain('f_TPR')
+  })
+
+  it('combines all filters in a single URL', () => {
+    const url = buildSearchUrl('engineer', {
+      location: 'San Francisco',
+      seniorities: ['senior'],
+      workTypes: ['remote'],
+      recency: 'week',
+    }, 25)
+    expect(url).toContain('location=San+Francisco')
+    expect(url).toContain('f_E=4')
+    expect(url).toContain('f_WT=2')
+    expect(url).toContain('f_TPR=r604800')
+    expect(url).toContain('start=25')
+  })
+})

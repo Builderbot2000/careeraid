@@ -84,4 +84,72 @@ test.describe('Job Board & Ranking Module', () => {
     await tailorBtn.click()
     await expect(page.getByRole('heading', { name: /Resume|Tailor/i })).toBeVisible({ timeout: 5_000 })
   })
+
+  // ─── Bulk selection & delete ───────────────────────────────────────────────
+
+  test('each posting row has a checkbox for selection', async ({ page }) => {
+    const firstRowCheckbox = page.locator('table tbody tr').first().locator('input[type="checkbox"]')
+    await expect(firstRowCheckbox).toBeVisible()
+  })
+
+  test('header checkbox selects all rows on the current page', async ({ page }) => {
+    const headerCheckbox = page.locator('table thead input[type="checkbox"]').first()
+    await headerCheckbox.check()
+
+    const rowCheckboxes = page.locator('table tbody tr input[type="checkbox"]')
+    const count = await rowCheckboxes.count()
+    for (let i = 0; i < count; i++) {
+      await expect(rowCheckboxes.nth(i)).toBeChecked()
+    }
+  })
+
+  test('delete button appears when at least one row is selected', async ({ page }) => {
+    await page.locator('table tbody tr').first().locator('input[type="checkbox"]').check()
+    await expect(page.getByRole('button', { name: /Delete/i })).toBeVisible()
+  })
+
+  test('deleting selected postings removes them from the board', async ({ page }) => {
+    // Count initial rows
+    const rows = page.locator('table tbody tr')
+    const initialCount = await rows.count()
+
+    // Select first row and delete
+    await rows.first().locator('input[type="checkbox"]').check()
+    await page.getByRole('button', { name: /Delete \(1\)|Delete/i }).click()
+
+    // One fewer row
+    await expect(rows).toHaveCount(initialCount - 1)
+  })
+
+  test('delete button label shows selected count', async ({ page }) => {
+    const rowCheckboxes = page.locator('table tbody tr input[type="checkbox"]')
+    await rowCheckboxes.nth(0).check()
+    await rowCheckboxes.nth(1).check()
+    await expect(page.getByRole('button', { name: /Delete \(2\)/i })).toBeVisible()
+  })
+
+  test('deselecting all rows hides the delete button', async ({ page }) => {
+    const checkbox = page.locator('table tbody tr').first().locator('input[type="checkbox"]')
+    await checkbox.check()
+    await expect(page.getByRole('button', { name: /Delete/i })).toBeVisible()
+    await checkbox.uncheck()
+    await expect(page.getByRole('button', { name: /Delete/i })).not.toBeVisible()
+  })
+
+  // ─── Quick-advance status button ──────────────────────────────────────────
+
+  test('each posting row shows a quick-advance arrow button', async ({ page }) => {
+    // Arrow button advances from 'new' → 'viewed'
+    const advanceBtn = page.locator('table tbody tr').first().getByRole('button', { name: /→|viewed/i })
+    await expect(advanceBtn).toBeVisible()
+  })
+
+  test('clicking the quick-advance button advances status to the next step', async ({ page }) => {
+    const firstRow = page.locator('table tbody tr').first()
+    const statusSelect = firstRow.locator('select')
+    await expect(statusSelect).toHaveValue('new')
+
+    await firstRow.getByRole('button', { name: /→|viewed/i }).click()
+    await expect(statusSelect).toHaveValue('viewed')
+  })
 })

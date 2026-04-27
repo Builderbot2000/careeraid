@@ -50,3 +50,12 @@ parent: Specifications
 - The compiled PDF is displayed natively inside the app.
 - A snapshot of the resume data is stored alongside the source file.
 - If the source file is lost, the PDF can be recompiled from the stored snapshot (**Recompile from snapshot**).
+
+---
+
+## Resume Naming
+
+- Each tailored resume record has a user-editable display name (`name`), separate from the posting title.
+- The name is edited inline in the resume list sidebar: clicking the current name switches it to a text input; pressing Enter or blurring commits the change; pressing Escape cancels.
+- The name defaults to empty; the sidebar falls back to displaying the posting title when no name is set.
+- Tailoring a resume does not record an applied date; `applied_at` is nullable and is set only when the user explicitly marks the posting as applied.
