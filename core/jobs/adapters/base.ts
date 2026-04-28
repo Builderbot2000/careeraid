@@ -44,6 +44,9 @@ export const JobPostingSchema = z.object({
   affinity_reasoning: z.string().nullable(),
   first_response_at: z.string().nullable(),
   last_seen_at: z.string(),
+  salary_min: z.number().int().nullable(),
+  salary_max: z.number().int().nullable(),
+  company_rating: z.number().nullable(),
 })
 
 export type JobPosting = z.infer<typeof JobPostingSchema>
@@ -74,6 +77,9 @@ export interface JobPostingRow {
   affinity_reasoning: string | null
   first_response_at: string | null
   last_seen_at: string
+  salary_min: number | null
+  salary_max: number | null
+  company_rating: number | null
 }
 
 export function rowToPosting(row: JobPostingRow): JobPosting {

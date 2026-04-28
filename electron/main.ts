@@ -36,6 +36,9 @@ import { chromium } from 'playwright'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { LinkedInAdapter } from '../core/jobs/adapters/linkedin'
 import { IndeedAdapter } from '../core/jobs/adapters/indeed'
+import { GlassdoorAdapter } from '../core/jobs/adapters/glassdoor'
+import { HackerNewsAdapter } from '../core/jobs/adapters/hackernews'
+import { HNHiringAdapter } from '../core/jobs/adapters/hnhiring'
 import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
 import { getFilteredRankedPostings, getRankedPostings } from '../core/jobs/ranker'
 import { generateSearchTerms, generateSearchTermsFromProfile } from '../core/jobs/searchTermGen'
@@ -791,6 +794,10 @@ function registerIpcHandlers(): void {
     try { return fs.existsSync(chromium.executablePath()) } catch { return false }
   }
 
+  function glassdoorAvailable(): boolean {
+    try { return fs.existsSync(chromium.executablePath()) } catch { return false }
+  }
+
   ipcMain.handle('jobs:list-adapters', () => [
     {
       id: 'mock',
@@ -810,16 +817,38 @@ function registerIpcHandlers(): void {
       description: 'Scrapes Indeed public job search (no login required)',
       available: indeedAvailable(),
     },
+    {
+      id: 'glassdoor',
+      name: 'Glassdoor',
+      description: 'Scrapes Glassdoor job search, including salary estimates (no login required)',
+      available: glassdoorAvailable(),
+    },
+    {
+      id: 'hackernews',
+      name: 'Hacker News Jobs',
+      description: 'YC startup job feed from news.ycombinator.com/jobs (no login required)',
+      available: true,
+    },
+    {
+      id: 'hnhiring',
+      name: 'HN Hiring',
+      description: 'Monthly "Who is Hiring?" posts formatted at hnhiring.com (no login required)',
+      available: true,
+    },
   ])
 
   ipcMain.handle('jobs:run-scrape', async (_event, adapterIds?: string[]) => {
-    const all: InstanceType<typeof MockAdapter | typeof LinkedInAdapter | typeof IndeedAdapter>[] = [new MockAdapter()]
+    const all: InstanceType<typeof MockAdapter | typeof LinkedInAdapter | typeof IndeedAdapter | typeof GlassdoorAdapter | typeof HackerNewsAdapter | typeof HNHiringAdapter>[] = [new MockAdapter(), new HackerNewsAdapter(), new HNHiringAdapter()]
     if (linkedInAvailable()) {
       all.push(new LinkedInAdapter())
     }
     if (indeedAvailable()) {
       all.push(new IndeedAdapter())
     }
+    if (glassdoorAvailable()) {
+      all.push(new GlassdoorAdapter())
+    }
+    // HackerNewsAdapter is always available (no Playwright dependency)
     const adapters = adapterIds ? all.filter((a) => adapterIds.includes(a.id)) : all
     return runScrape(getDb(), adapters, (p) => {
       mainWindow?.webContents.send('jobs:adapter-progress', p)

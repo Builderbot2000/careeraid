@@ -28,6 +28,9 @@ const BASE_FIELDS = {
   affinity_scored_at: null,
   affinity_reasoning: null,
   first_response_at: null,
+  salary_min: null,
+  salary_max: null,
+  company_rating: null,
 }
 
 function p(

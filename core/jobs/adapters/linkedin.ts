@@ -345,6 +345,9 @@ export class LinkedInAdapter extends BaseAdapter {
             affinity_reasoning: null,
             first_response_at: null,
             last_seen_at: now,
+            salary_min: null,
+            salary_max: null,
+            company_rating: null,
           })
 
           onPosting?.()

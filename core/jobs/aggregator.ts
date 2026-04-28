@@ -203,7 +203,7 @@ export async function runScrape(
     adapters.map(async (adapter) => {
       onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
       let adapterFetched = 0
-      const adapterPostings: JobPosting[] = []
+      const adapterPostings: Omit<JobPosting, 'id'>[] = []
 
       for (const run of expandedRuns) {
         const filters: SearchFilters = {}
@@ -287,12 +287,14 @@ export function commitScrape(db: Database.Database): void {
       id, source, url, resolved_domain, title, company, location,
       yoe_min, yoe_max, seniority, tech_stack, posted_at, applicant_count,
       raw_text, fetched_at, scraper_mod_version, status,
-      affinity_score, affinity_skipped, affinity_scored_at, first_response_at, last_seen_at
+      affinity_score, affinity_skipped, affinity_scored_at, first_response_at, last_seen_at,
+      salary_min, salary_max, company_rating
     ) VALUES (
       @id, @source, @url, @resolved_domain, @title, @company, @location,
       @yoe_min, @yoe_max, @seniority, @tech_stack, @posted_at, @applicant_count,
       @raw_text, @fetched_at, @scraper_mod_version, @status,
-      @affinity_score, @affinity_skipped, @affinity_scored_at, @first_response_at, @last_seen_at
+      @affinity_score, @affinity_skipped, @affinity_scored_at, @first_response_at, @last_seen_at,
+      @salary_min, @salary_max, @company_rating
     )
   `)
 
