@@ -11,6 +11,7 @@ import sql009 from './009_search_term_conditions.sql?raw'
 import sql010 from './010_search_terms_drop_adapter_id.sql?raw'
 import sql011 from './011_applications_name.sql?raw'
 import sql012 from './012_search_terms_multiselect.sql?raw'
+import sql013 from './013_salary_company_rating.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -29,6 +30,7 @@ const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '010_search_terms_drop_adapter_id.sql', sql: sql010 },
   { filename: '011_applications_name.sql', sql: sql011 },
   { filename: '012_search_terms_multiselect.sql', sql: sql012 },
+  { filename: '013_salary_company_rating.sql', sql: sql013 },
 ]
 
 export function runMigrations(
