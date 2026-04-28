@@ -1,12 +1,35 @@
 # Career Index
 
-Local-first desktop app for managing a career profile, generating tailored LaTeX resumes, aggregating job postings, and tracking applications. All data stays on your machine; the only external calls are to the Anthropic Claude API.
+> **Pre-alpha** — expect rough edges and breaking changes between releases.
+
+Career Index is a local-first desktop app that keeps your entire job search in one place. It aggregates postings from LinkedIn, Indeed, and RSS feeds; scores them against your profile using Claude; generates tailored LaTeX resumes; and tracks every application through to offer or rejection. **All data lives on your machine.** The only external calls are to the Anthropic Claude API and to job board sources during a scrape.
+
+## Features
+
+- **Profile** — maintain a structured career profile (work history, skills, education) that feeds every resume.
+- **Job Aggregation** — define search terms, scrape multiple boards concurrently, deduplicate, and review before committing postings to your board.
+- **AI Ranking** — Claude scores each posting for affinity to your profile and generates a plain-English reasoning note; configurable weighting lets you emphasise salary, recency, or company rating.
+- **Resume Engine** — pick a posting, tailor your profile content with Claude, and compile a PDF via XeLaTeX using the included templates.
+- **Application Tracker** — move favorites through a status lifecycle (Applied → Interview → Offer / Rejected) with timestamped history.
+- **Analytics** — funnel metrics, source breakdown, volume over time, and Claude API cost tracking.
+- **Data Management** — one-click backup, JSON export, and full import.
+- **Local-first & private** — SQLite database, no cloud sync, no telemetry.
+
+## Quick Start (pre-built release)
+
+1. Download the installer for your platform from the [Releases](../../releases) page.
+2. Install and launch Career Index.
+3. Open **Settings** and paste your [Anthropic API key](https://console.anthropic.com/). Claude-powered features unlock immediately.
+4. *(Optional)* Install a TeX distribution if you want PDF resume compilation (see [Prerequisites](#prerequisites)).
+5. Go to **Profile** and fill in your work history, skills, and education.
+6. Go to **Search Config**, add search terms, and run your first scrape.
+7. Review the incoming postings on the **Job Board**, favorite the ones worth applying to, and generate a tailored resume from **Resume Preview**.
 
 ## Prerequisites
 
 | Requirement | Notes |
 |---|---|
-| Node.js ≥ 20 | Required |
+| Node.js ≥ 20 | For building from source only |
 | TeX distribution | MiKTeX (Windows), MacTeX (macOS), texlive (Linux) — needed for PDF compilation |
 
 ## Setup
