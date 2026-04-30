@@ -1,6 +1,6 @@
 {
   "name": "career-index",
-  "version": "0.1.0",
+  "version": "1.2.0",
   "description": "Local-first job hunting desktop app",
   "author": "Kevin Tang <kevintang1118@outlook.com>",
   "main": "out/main/index.js",
