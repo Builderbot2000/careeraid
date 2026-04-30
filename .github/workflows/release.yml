@@ -55,8 +55,8 @@ jobs:
       - name: Build app + adapters
         run: npm run build
 
-      - name: Package & publish
-        run: npx electron-builder ${{ matrix.args }} --publish ${{ startsWith(github.ref, 'refs/tags/') && 'always' || 'never' }}
+      - name: Package
+        run: npx electron-builder ${{ matrix.args }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -70,3 +70,14 @@ jobs:
             dist/*.exe
             dist/*.yml
           if-no-files-found: error
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.exe
+            dist/*.yml
+          fail_on_unmatched_files: false
