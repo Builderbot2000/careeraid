@@ -1,6 +1,6 @@
 {
   "name": "careeraid",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "description": "Local-first job hunting desktop app",
   "author": "Kevin Tang <kevintang1118@outlook.com>",
   "main": "out/main/index.js",
