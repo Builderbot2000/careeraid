@@ -13,6 +13,7 @@ import type {
   BanListEntry,
   JobPosting,
   AdapterProgress,
+  CaptchaRequest,
   ProfileEntry,
   WorkType,
   SearchTermSeniority,
@@ -185,12 +186,16 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('jobs:run-scrape', adapterIds)
   },
 
-  commitScrape(): Promise<void> {
-    return ipcRenderer.invoke('jobs:commit-scrape')
+  pauseScrape(): Promise<void> {
+    return ipcRenderer.invoke('jobs:pause-scrape')
   },
 
-  discardScrape(): Promise<void> {
-    return ipcRenderer.invoke('jobs:discard-scrape')
+  resumeScrape(): Promise<void> {
+    return ipcRenderer.invoke('jobs:resume-scrape')
+  },
+
+  abortScrape(): Promise<void> {
+    return ipcRenderer.invoke('jobs:abort-scrape')
   },
 
   getPostings() {
@@ -257,11 +262,25 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('jobs:scrape-committed', () => cb())
   },
 
+  onPostingCommitted(cb: (posting: JobPosting) => void): (() => void) {
+    const handler = (_event: Electron.IpcRendererEvent, posting: JobPosting) => cb(posting)
+    ipcRenderer.on('jobs:posting-committed', handler)
+    return () => ipcRenderer.removeListener('jobs:posting-committed', handler)
+  },
+
   onAffinityUpdated(cb: (postings: JobPosting[]) => void): void {
     ipcRenderer.on('jobs:affinity-updated', (_event, postings: JobPosting[]) => cb(postings))
   },
 
   onAdapterProgress(cb: (p: AdapterProgress) => void): void {
     ipcRenderer.on('jobs:adapter-progress', (_event, p: AdapterProgress) => cb(p))
+  },
+
+  onCaptchaRequired(cb: (req: CaptchaRequest) => void): void {
+    ipcRenderer.on('jobs:captcha-required', (_event, req: CaptchaRequest) => cb(req))
+  },
+
+  resolveCaptcha(adapterId: string): Promise<void> {
+    return ipcRenderer.invoke('jobs:captcha-resolved', adapterId)
   },
 } satisfies ElectronAPI)

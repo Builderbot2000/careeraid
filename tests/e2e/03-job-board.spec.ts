@@ -3,7 +3,7 @@ import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
 test.describe('Job Board & Ranking Module', () => {
   test.beforeEach(async ({ page }) => {
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
   })
 
   test('displays postings after a committed scrape', async ({ page }) => {
@@ -39,21 +39,21 @@ test.describe('Job Board & Ranking Module', () => {
     await page.getByLabel(/Years of experience|YOE/i).fill('1')
     await page.getByRole('button', { name: /Save YOE|Save/i }).first().click()
 
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     // With YOE=1 and all postings requiring 3+, the board should be empty
     await expect(page.getByText(/No postings|no results|empty/i)).toBeVisible({ timeout: 10_000 })
   })
 
   test('excluded stack filter hides postings containing that stack item', async ({ page }) => {
     // Add "Go" to excluded stack — several mock postings include Go
-    await goTo(page, 'Search Config')
+    await goTo(page, 'Search')
     await page.getByRole('tab', { name: /Filters/i }).or(page.getByRole('button', { name: /Filters/i })).click()
     const excludedStackInput = page.getByLabel(/Excluded stack|Excluded tech/i)
       .or(page.getByPlaceholder(/e\.g\. PHP/i))
     await excludedStackInput.fill('Go')
     await page.getByRole('button', { name: /Save|Apply/i }).click()
 
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     // Stripe (Go) and Fly.io (Go) should no longer appear
     await expect(page.getByText('Stripe')).not.toBeVisible({ timeout: 5_000 })
   })
@@ -75,7 +75,7 @@ test.describe('Job Board & Ranking Module', () => {
     await thresholdInput.fill('20')
     await page.getByRole('button', { name: /Save|Apply/i }).first().click()
 
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await expect(page.getByText(/not scored.*small batch|small batch/i).first()).toBeVisible({ timeout: 10_000 })
   })
 

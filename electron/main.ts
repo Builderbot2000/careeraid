@@ -35,7 +35,8 @@ import { compileTyp, recompileFromSnapshot } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
 import { loadAdapters, getUserAdapterDir } from '../core/jobs/pluginLoader'
 import type { BaseAdapter } from '../core/jobs/adapters/base'
-import { runScrape, commitScrape, discardScrape } from '../core/jobs/aggregator'
+import type { CrawlController } from '../core/jobs/adapters/base'
+import { runScrape, createCrawlController } from '../core/jobs/aggregator'
 import { getFilteredRankedPostings, getRankedPostings } from '../core/jobs/ranker'
 import { generateSearchTerms, generateSearchTermsFromProfile } from '../core/jobs/searchTermGen'
 import { writeLLMUsage } from '../core/jobs/llmUsage'
@@ -86,6 +87,18 @@ function resolveTypstBin(): string {
 
 /** Populated in app.whenReady() by loadAdapters() before IPC handlers run. */
 let ALL_ADAPTERS: BaseAdapter[] = []
+
+/**
+ * Controller for the currently active scrape. Null when no scrape is running.
+ * Used by pause/resume/abort IPC handlers.
+ */
+let activeCrawlController: CrawlController | null = null
+
+/**
+ * Resolvers for in-progress captcha pauses, keyed by adapter ID.
+ * When the renderer calls jobs:captcha-resolved, the matching promise unblocks.
+ */
+const captchaResolvers = new Map<string, () => void>()
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -814,28 +827,57 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('jobs:run-scrape', async (_event, adapterIds?: string[]) => {
     const adapters = adapterIds ? ALL_ADAPTERS.filter((a) => adapterIds.includes(a.id)) : ALL_ADAPTERS
-    return runScrape(getDb(), adapters, (p) => {
-      mainWindow?.webContents.send('jobs:adapter-progress', p)
-    })
-  })
-
-  ipcMain.handle('jobs:commit-scrape', () => {
-    commitScrape(getDb())
-    mainWindow?.webContents.send('jobs:scrape-committed')
-    logger.info('Scrape committed')
-    if (getApiKeyPresent()) {
-      const key = getApiKey()
-      if (key) {
-        getRankedPostings(getDb(), key)
-          .then((postings) => mainWindow?.webContents.send('jobs:affinity-updated', postings))
-          .catch((err) => logger.error('Background affinity scoring failed', err))
+    const controller = createCrawlController()
+    activeCrawlController = controller
+    try {
+      const summary = await runScrape(
+        getDb(),
+        adapters,
+        (p) => { mainWindow?.webContents.send('jobs:adapter-progress', p) },
+        (adapterId) => {
+          const adapterName = ADAPTER_META[adapterId]?.name ?? adapterId
+          mainWindow?.webContents.send('jobs:captcha-required', { adapterId, adapterName })
+          return new Promise<void>((resolve) => {
+            captchaResolvers.set(adapterId, resolve)
+          })
+        },
+        (posting) => { mainWindow?.webContents.send('jobs:posting-committed', posting) },
+        controller,
+      )
+      logger.info('Scrape complete', summary)
+      mainWindow?.webContents.send('jobs:scrape-committed')
+      if (getApiKeyPresent()) {
+        const key = getApiKey()
+        if (key) {
+          getRankedPostings(getDb(), key)
+            .then((postings) => mainWindow?.webContents.send('jobs:affinity-updated', postings))
+            .catch((err) => logger.error('Background affinity scoring failed', err))
+        }
       }
+      return summary
+    } finally {
+      activeCrawlController = null
     }
   })
 
-  ipcMain.handle('jobs:discard-scrape', () => {
-    discardScrape()
-    logger.info('Scrape discarded')
+  ipcMain.handle('jobs:captcha-resolved', (_event, adapterId: string) => {
+    captchaResolvers.get(adapterId)?.()
+    captchaResolvers.delete(adapterId)
+  })
+
+  ipcMain.handle('jobs:pause-scrape', () => {
+    activeCrawlController?.pause()
+    logger.info('Scrape paused')
+  })
+
+  ipcMain.handle('jobs:resume-scrape', () => {
+    activeCrawlController?.resume()
+    logger.info('Scrape resumed')
+  })
+
+  ipcMain.handle('jobs:abort-scrape', () => {
+    activeCrawlController?.abort()
+    logger.info('Scrape aborted')
   })
 
   ipcMain.handle('jobs:get-postings', () => {
@@ -1041,7 +1083,10 @@ app.whenReady().then(async () => {
 
   // Load adapter plugins (built-in bundles + user-dropped) before registering
   // IPC handlers so that jobs:list-adapters and jobs:run-scrape are ready.
-  ALL_ADAPTERS = loadAdapters(app.getAppPath(), app.getPath('userData'))
+  // In development/test mode app.getAppPath() returns out/main/ (the script dir),
+  // so we resolve the project root via __dirname instead.
+  const appRoot = app.isPackaged ? app.getAppPath() : path.join(__dirname, '..', '..')
+  ALL_ADAPTERS = loadAdapters(appRoot, app.getPath('userData'))
   logger.info(`Loaded ${ALL_ADAPTERS.length} adapter(s): ${ALL_ADAPTERS.map((a) => a.id).join(', ')}`)
 
   registerIpcHandlers()

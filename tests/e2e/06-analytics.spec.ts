@@ -13,7 +13,7 @@ test.describe('Analytics Module', () => {
     await runAndCommitScrape(page)
 
     // Favorite and advance one posting to applied
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.locator('select').first().selectOption('favorited')
     await goTo(page, 'Tracker')
     await page.locator('table tbody tr').first().locator('select').selectOption('applied')

@@ -57,6 +57,10 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
         window.api.onAffinityUpdated((updated) => {
             setPostings(updated)
         })
+        const unsubPosting = window.api.onPostingCommitted((posting) => {
+            setPostings((prev) => [posting, ...prev])
+        })
+        return () => { unsubPosting() }
     }, [loadPostings])
 
     function toggleSelect(id: string): void {

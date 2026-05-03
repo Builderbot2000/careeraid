@@ -80,6 +80,7 @@ export interface JobPostingRow {
   salary_min: number | null
   salary_max: number | null
   company_rating: number | null
+  applied_at?: string | null
 }
 
 export function rowToPosting(row: JobPostingRow): JobPosting {
@@ -90,6 +91,23 @@ export function rowToPosting(row: JobPostingRow): JobPosting {
     tech_stack: JSON.parse(row.tech_stack) as string[],
     affinity_skipped: row.affinity_skipped === 1,
   }
+}
+
+// ─── Crawl control ───────────────────────────────────────────────────────────
+
+export interface CrawlSignal {
+  readonly aborted: boolean
+  /** Resolves immediately when running; awaits resume() call when paused. */
+  waitForResume(): Promise<void>
+  /** Throws if the crawl has been aborted. */
+  checkAborted(): void
+}
+
+export interface CrawlController {
+  readonly signal: CrawlSignal
+  pause(): void
+  resume(): void
+  abort(): void
 }
 
 // ─── Adapter interface ────────────────────────────────────────────────────────
@@ -107,5 +125,11 @@ export abstract class BaseAdapter {
   readonly delayMs: number = 3000
   readonly availableSignals: Set<string> = new Set()
 
-  abstract search(term: string, filters: SearchFilters, onPosting?: () => void): Promise<Omit<JobPosting, 'id'>[]>
+  abstract search(
+    term: string,
+    filters: SearchFilters,
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void>
 }

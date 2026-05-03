@@ -47,8 +47,8 @@ export function getBySource(db: Database.Database): SourceMetric[] {
          SUM(CASE WHEN status IN ('interviewing','offer','rejected') THEN 1 ELSE 0 END) AS responded,
          AVG(
            CASE
-             WHEN first_response_at IS NOT NULL AND applied_at IS NOT NULL
-             THEN CAST((julianday(first_response_at) - julianday(applied_at)) AS REAL)
+             WHEN jp.first_response_at IS NOT NULL AND a.applied_at IS NOT NULL
+             THEN CAST((julianday(jp.first_response_at) - julianday(a.applied_at)) AS REAL)
              ELSE NULL
            END
          ) AS avg_days

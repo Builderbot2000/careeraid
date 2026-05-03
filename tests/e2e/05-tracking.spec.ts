@@ -12,7 +12,7 @@ test.describe('Application Tracking Module', () => {
   })
 
   test('favoriting a posting makes it appear in the application management view', async ({ page }) => {
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     // Find the status control for the first posting and set it to favorited
     const firstStatusControl = page.getByRole('combobox').first()
       .or(page.getByRole('button', { name: /favorite|mark/i }).first())
@@ -33,7 +33,7 @@ test.describe('Application Tracking Module', () => {
 
   test('status advances through the lifecycle: favorited → applied → interviewing → offer', async ({ page }) => {
     // Favorite a posting via the job board status control
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     const statusSelect = page.locator('select').first()
     await statusSelect.selectOption('favorited')
 
@@ -54,7 +54,7 @@ test.describe('Application Tracking Module', () => {
   })
 
   test('status can be set to rejected from applied', async ({ page }) => {
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.locator('select').first().selectOption('favorited')
 
     await goTo(page, 'Tracker')
@@ -65,7 +65,7 @@ test.describe('Application Tracking Module', () => {
   })
 
   test('status can be set to ghosted from interviewing', async ({ page }) => {
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.locator('select').first().selectOption('favorited')
 
     await goTo(page, 'Tracker')
@@ -77,7 +77,7 @@ test.describe('Application Tracking Module', () => {
   })
 
   test('tracker columns show company, role, date applied, status, and source', async ({ page }) => {
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.locator('select').first().selectOption('favorited')
 
     await goTo(page, 'Tracker')
@@ -100,13 +100,13 @@ test.describe('Application Tracking Module', () => {
 
     // Tailor a resume for the first posting
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
     await page.getByRole('button', { name: /Tailor|Generate/i }).click()
     await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })
 
     // Mark the posting as favorited so it shows in the tracker
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.locator('select').first().selectOption('favorited')
 
     await goTo(page, 'Tracker')
@@ -118,7 +118,7 @@ test.describe('Application Tracking Module', () => {
   })
 
   test('applied_at date is shown only after explicitly setting status to applied', async ({ page }) => {
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     const statusSelect = page.locator('select').first()
     await statusSelect.selectOption('favorited')
 

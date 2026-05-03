@@ -182,12 +182,16 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                 {applications.length > 0 && (
                     <div>
                         <h3 style={{ fontSize: '0.85rem', margin: '8px 0 4px' }}>Previous Resumes</h3>
-                        <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.8rem' }}>
+                        <ul className="resume-list" style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: '0.8rem' }}>
                             {applications.map((app) => (
                                 <li
                                     key={app.id}
                                     data-testid="application-entry"
-                                    onClick={() => handleSelectApplication(app)}
+                                    onClick={() => {
+                                        handleSelectApplication(app)
+                                        setEditingNameId(app.id)
+                                        setEditingNameValue(app.name ?? '')
+                                    }}
                                     style={{
                                         padding: '6px 8px',
                                         cursor: 'pointer',
@@ -201,6 +205,7 @@ export default function ResumePreview({ initialPosting }: ResumePreviewProps): R
                                 >
                                     {editingNameId === app.id ? (
                                         <input
+                                            type="text"
                                             autoFocus
                                             value={editingNameValue}
                                             onClick={(e) => e.stopPropagation()}

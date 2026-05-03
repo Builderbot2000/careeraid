@@ -16,7 +16,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
 
     const templateSelect = page.getByLabel(/Template/i).or(page.getByRole('combobox'))
@@ -31,7 +31,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
 
     // Initiate tailoring
@@ -49,7 +49,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
     await page.getByRole('button', { name: /Tailor|Generate/i }).click()
     await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })
@@ -88,7 +88,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
     await page.getByRole('button', { name: /Tailor|Generate/i }).click()
     await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })
@@ -109,7 +109,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
     await page.getByRole('button', { name: /Tailor|Generate/i }).click()
     await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })
@@ -130,7 +130,7 @@ test.describe('Resume Module', () => {
     await page.getByRole('button', { name: /Save.*key|Set key/i }).click()
 
     await runAndCommitScrape(page)
-    await goTo(page, 'Job Board')
+    await goTo(page, 'Jobs')
     await page.getByRole('button', { name: /Tailor Resume/i }).first().click()
     await page.getByRole('button', { name: /Tailor|Generate/i }).click()
     await page.locator('iframe').or(page.getByText(/resume ready|compiled/i)).waitFor({ timeout: 20_000 })

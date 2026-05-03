@@ -1,5 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright'
-import { BaseAdapter, type JobPosting, type SearchFilters } from '../base'
+import { BaseAdapter, type JobPosting, type SearchFilters, type CrawlSignal } from '../base'
 import { extractYoe, extractSeniority, extractTechStack, KNOWN_TECH } from '../linkedin'
 
 export { KNOWN_TECH }
@@ -422,14 +422,16 @@ export class GlassdoorAdapter extends BaseAdapter {
   override async search(
     term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
     const browser = await chromium.launch({
       headless: false,
       args: ['--disable-blink-features=AutomationControlled'],
     })
     try {
-      return await this._scrape(browser, term, filters, onPosting)
+      await this._scrape(browser, term, filters, onPosting, onCaptchaRequired, signal)
     } finally {
       await browser.close()
     }
@@ -439,8 +441,10 @@ export class GlassdoorAdapter extends BaseAdapter {
     browser: Browser,
     term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
     const context: BrowserContext = await browser.newContext({
       userAgent:
         'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -451,22 +455,34 @@ export class GlassdoorAdapter extends BaseAdapter {
 
     const searchPage = await context.newPage()
     const detailPage = await context.newPage()
-    const results: Omit<JobPosting, 'id'>[] = []
     let consecutiveFails = 0
+    let reportedCount = 0
     const now = new Date().toISOString()
     const pageLimit = filters.maxResults != null
       ? Math.min(Math.ceil(filters.maxResults / PAGE_SIZE), MAX_PAGES)
       : MAX_PAGES
 
     for (let pageNum = 0; pageNum < pageLimit; pageNum++) {
+      await signal?.waitForResume()
+      signal?.checkAborted()
+
       const url = buildSearchUrl(term, filters, pageNum)
       await searchPage.goto(url, { waitUntil: 'load', timeout: 30_000 })
       console.log(`[glassdoor] page ${pageNum} landed on: ${searchPage.url()}`)
 
-      // Cloudflare challenge — abort immediately
+      // Cloudflare challenge — pause and wait for user to solve, then retry
       if (await isCloudflareChallenge(searchPage)) {
-        console.warn('[glassdoor] Cloudflare challenge detected, aborting')
-        break
+        console.warn('[glassdoor] Cloudflare challenge detected, pausing for user')
+        if (onCaptchaRequired) {
+          await onCaptchaRequired()
+          await searchPage.reload({ waitUntil: 'load', timeout: 30_000 })
+          if (await isCloudflareChallenge(searchPage)) {
+            console.warn('[glassdoor] Cloudflare challenge still present after resume, aborting')
+            break
+          }
+        } else {
+          break
+        }
       }
 
       // Wait for job listings to appear
@@ -498,8 +514,8 @@ export class GlassdoorAdapter extends BaseAdapter {
       if (rawCards.length === 0) break
 
       for (const raw of rawCards) {
-        if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) return results
-        if (filters.maxResults != null && results.length >= filters.maxResults) return results
+        if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) return
+        if (filters.maxResults != null && reportedCount >= filters.maxResults) return
 
         if (!raw.href || !raw.title || !raw.company) {
           // Selector miss — skip silently without counting as a parse failure.
@@ -549,8 +565,18 @@ export class GlassdoorAdapter extends BaseAdapter {
 
           const wallPersists = await dismissAuthWall(detailPage)
           if (wallPersists) {
-            console.warn('[glassdoor] auth wall on detail page, returning partial results')
-            return results
+            console.warn('[glassdoor] auth wall on detail page, pausing for user')
+            if (onCaptchaRequired) {
+              await onCaptchaRequired()
+              // Retry dismissal after user interaction
+              const stillPersists = await dismissAuthWall(detailPage)
+              if (stillPersists) {
+                console.warn('[glassdoor] auth wall persists after resume, returning partial results')
+                return
+              }
+            } else {
+              return
+            }
           }
 
           const detail = await parseDetail(detailPage)
@@ -572,7 +598,7 @@ export class GlassdoorAdapter extends BaseAdapter {
         const seniority = extractSeniority(raw.title, raw_text ?? '')
         const tech_stack = extractTechStack(raw_text ?? raw.title)
 
-        results.push({
+        onPosting?.({
           source: SOURCE,
           url: jobUrl,
           resolved_domain: null,
@@ -599,9 +625,8 @@ export class GlassdoorAdapter extends BaseAdapter {
           salary_max,
           company_rating,
         })
-
+        reportedCount++
         consecutiveFails = 0
-        onPosting?.()
 
         // Pause between detail page requests to avoid rate-limiting.
         // Jitter spreads requests so they don't look metronomic.
@@ -616,8 +641,6 @@ export class GlassdoorAdapter extends BaseAdapter {
 
       await delay(3000) // pause before loading next page
     }
-
-    return results
   }
 }
 

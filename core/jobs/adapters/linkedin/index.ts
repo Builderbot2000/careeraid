@@ -1,5 +1,5 @@
 import { chromium, type Browser, type ElementHandle, type Page } from 'playwright'
-import { BaseAdapter, type JobPosting, type SearchFilters, type Seniority } from '../base'
+import { BaseAdapter, type JobPosting, type SearchFilters, type Seniority, type CrawlSignal } from '../base'
 
 const SOURCE = 'linkedin'
 const SCRAPER_VERSION = 'linkedin-adapter@1'
@@ -232,6 +232,23 @@ export async function parseDetail(page: Page): Promise<ParsedDetail> {
   return { raw_text, applicant_count }
 }
 
+// ─── Challenge / captcha detection ──────────────────────────────────────────
+
+async function isChallengeOrCaptcha(page: Page): Promise<boolean> {
+  const title = (await page.title().catch(() => '')).toLowerCase()
+  if (
+    title.includes('security check') ||
+    title.includes('captcha') ||
+    title.includes('verify you are human') ||
+    title.includes('just a moment')
+  ) return true
+  const hasCaptchaEl = await page
+    .$('#captcha-internal, iframe[src*="captcha"], [data-challenge]')
+    .then((el) => el !== null)
+    .catch(() => false)
+  return hasCaptchaEl
+}
+
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
 export class LinkedInAdapter extends BaseAdapter {
@@ -242,11 +259,13 @@ export class LinkedInAdapter extends BaseAdapter {
   override async search(
     term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
-    const browser = await chromium.launch({ headless: true })
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
+    const browser = await chromium.launch({ headless: false })
     try {
-      return await this._scrape(browser, term, filters, onPosting)
+      await this._scrape(browser, term, filters, onPosting, onCaptchaRequired, signal)
     } finally {
       await browser.close()
     }
@@ -256,12 +275,14 @@ export class LinkedInAdapter extends BaseAdapter {
     browser: Browser,
     term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
     const searchPage = await browser.newPage()
     const detailPage = await browser.newPage()
-    const results: Omit<JobPosting, 'id'>[] = []
     let consecutiveFails = 0
+    let reportedCount = 0
     const now = new Date().toISOString()
     const pageLimit = filters.maxResults != null
       ? Math.min(Math.ceil(filters.maxResults / PAGE_SIZE), MAX_PAGES)
@@ -269,8 +290,27 @@ export class LinkedInAdapter extends BaseAdapter {
 
     try {
       for (let pageNum = 0; pageNum < pageLimit; pageNum++) {
+        await signal?.waitForResume()
+        signal?.checkAborted()
+
         const url = buildSearchUrl(term, filters, pageNum * PAGE_SIZE)
         await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+
+        // Pause for user to solve captcha/security challenge if detected.
+        if (await isChallengeOrCaptcha(searchPage)) {
+          console.warn(`[linkedin] challenge detected on page ${pageNum}, pausing for user`)
+          if (onCaptchaRequired) {
+            await onCaptchaRequired()
+            // Retry the navigation after user clears the challenge
+            await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+            if (await isChallengeOrCaptcha(searchPage)) {
+              console.warn('[linkedin] challenge persists after resume, aborting')
+              break
+            }
+          } else {
+            break
+          }
+        }
 
         // Wait for the results list; break if no results are returned.
         try {
@@ -284,8 +324,8 @@ export class LinkedInAdapter extends BaseAdapter {
 
         for (const card of cards) {
           if (consecutiveFails >= MAX_CONSECUTIVE_FAILS) {
-            // Enough consecutive failures on this adapter — return what we have.
-            return results
+            // Enough consecutive failures on this adapter — stop.
+            return
           }
 
           // ── Card-level fields ──────────────────────────────────────────────
@@ -322,7 +362,7 @@ export class LinkedInAdapter extends BaseAdapter {
           const seniority = extractSeniority(title, raw_text ?? '')
           const tech_stack = extractTechStack(raw_text ?? title)
 
-          results.push({
+          onPosting?.({
             source: SOURCE,
             url: jobUrl,
             resolved_domain: null,
@@ -349,11 +389,10 @@ export class LinkedInAdapter extends BaseAdapter {
             salary_max: null,
             company_rating: null,
           })
-
-          onPosting?.()
+          reportedCount++
           consecutiveFails = 0
 
-          if (filters.maxResults != null && results.length >= filters.maxResults) return results
+          if (filters.maxResults != null && reportedCount >= filters.maxResults) return
         }
 
         // Fewer cards than expected means we've reached the last page.
@@ -363,8 +402,6 @@ export class LinkedInAdapter extends BaseAdapter {
       await searchPage.close()
       await detailPage.close()
     }
-
-    return results
   }
 }
 

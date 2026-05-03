@@ -3,17 +3,26 @@ import { rowToPosting } from '../jobs/adapters/base'
 import type { JobPosting, JobPostingRow } from '../jobs/adapters/base'
 import type { PostingStatus } from './models'
 
+export interface TrackerPosting extends JobPosting {
+  applied_at: string | null
+}
+
+interface TrackerPostingRow extends JobPostingRow {
+  applied_at: string | null
+}
+
 /** Returns all postings that have progressed past new/viewed — i.e. the tracker rows. */
-export function getTrackerPostings(db: Database.Database): JobPosting[] {
+export function getTrackerPostings(db: Database.Database): TrackerPosting[] {
   const rows = db
     .prepare(
-      `SELECT * FROM job_postings
-       WHERE status NOT IN ('new', 'viewed')
-       ORDER BY last_seen_at DESC`,
+      `SELECT jp.*
+       FROM job_postings jp
+       WHERE jp.status NOT IN ('new', 'viewed')
+       ORDER BY jp.last_seen_at DESC`,
     )
-    .all() as JobPostingRow[]
+    .all() as TrackerPostingRow[]
 
-  return rows.map(rowToPosting)
+  return rows.map((row) => ({ ...rowToPosting(row), applied_at: row.applied_at ?? null }))
 }
 
 export function deletePostings(db: Database.Database, ids: string[]): void {
@@ -34,7 +43,13 @@ export function updatePostingStatus(
   const now = new Date().toISOString()
   const isFirstResponse = ['interviewing', 'offer', 'rejected', 'ghosted'].includes(status)
 
-  if (isFirstResponse) {
+  if (status === 'applied') {
+    db.prepare(
+      `UPDATE job_postings SET status = ?, last_seen_at = ?,
+       applied_at = CASE WHEN applied_at IS NULL THEN ? ELSE applied_at END
+       WHERE id = ?`,
+    ).run(status, now, now, id)
+  } else if (isFirstResponse) {
     db.prepare(
       `UPDATE job_postings
        SET status = ?, last_seen_at = ?,

@@ -7,7 +7,7 @@ test.describe('Job Filtering Module', () => {
     })
 
     async function goToBanList(page: import('playwright').Page) {
-      await goTo(page, 'Search Config')
+      await goTo(page, 'Search')
       await page.getByRole('tab', { name: /Ban List/i }).or(page.getByRole('button', { name: /Ban List/i })).click()
     }
 
@@ -23,7 +23,7 @@ test.describe('Job Filtering Module', () => {
 
     test('confirming a company ban hard-deletes matching postings from the job board', async ({ page }) => {
       // Verify Stripe is on the board first
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText('Stripe')).toBeVisible()
 
       // Add ban
@@ -34,7 +34,7 @@ test.describe('Job Filtering Module', () => {
       await page.getByRole('button', { name: /Add ban|Confirm|Add/i }).click()
 
       // Stripe should be gone from the job board
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText('Stripe')).not.toBeVisible()
     })
 
@@ -50,7 +50,7 @@ test.describe('Job Filtering Module', () => {
       // Entry should appear in the ban list
       await expect(page.getByText('news.ycombinator.com')).toBeVisible()
       // Postings from that domain should be gone
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText(/No postings|no results|empty/i)).toBeVisible({ timeout: 5_000 })
     })
 
@@ -71,7 +71,7 @@ test.describe('Job Filtering Module', () => {
       await expect(page.locator('li, tr').filter({ hasText: 'Stripe' })).not.toBeVisible()
 
       // But Stripe posting is still NOT in the job board (hard-deleted, not restored)
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText('Stripe')).not.toBeVisible()
     })
 
@@ -85,11 +85,14 @@ test.describe('Job Filtering Module', () => {
       await page.getByRole('button', { name: /Add ban|Confirm|Add/i }).click()
 
       // The Vercel posting from beforeEach scrape is now hard-deleted.
-      // Run another scrape — Vercel should be excluded in the summary.
-      await goTo(page, 'Search Config')
+      // Run another scrape — Vercel should be excluded by the ban filter.
+      await goTo(page, 'Search')
       await page.getByRole('button', { name: /Run Scrape/i }).click()
-      await page.waitForSelector('text=Net new to commit', { timeout: 15_000 })
-      await expect(page.getByText(/Ban list excluded/i)).toBeVisible()
+      await expect(page.getByTestId('search-run-scrape-btn')).toBeEnabled({ timeout: 15_000 })
+
+      // Verify Vercel did not appear in the job board
+      await goTo(page, 'Jobs')
+      await expect(page.getByText('Vercel')).not.toBeVisible()
     })
   })
 
@@ -99,7 +102,7 @@ test.describe('Job Filtering Module', () => {
     })
 
     async function goToFilters(page: import('playwright').Page) {
-      await goTo(page, 'Search Config')
+      await goTo(page, 'Search')
       await page.getByRole('tab', { name: /Filters/i }).or(page.getByRole('button', { name: /Filters/i })).click()
     }
 
@@ -111,7 +114,7 @@ test.describe('Job Filtering Module', () => {
       await requiredInput.fill('Rust')
       await page.getByRole('button', { name: /Save|Apply/i }).click()
 
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       // Stripe (Go, Ruby) should not appear; Fly.io (Rust) should appear
       await expect(page.getByText('Fly.io')).toBeVisible({ timeout: 10_000 })
       await expect(page.getByText('Linear')).not.toBeVisible()
@@ -125,7 +128,7 @@ test.describe('Job Filtering Module', () => {
       await excludedInput.fill('PostgreSQL')
       await page.getByRole('button', { name: /Save|Apply/i }).click()
 
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       // Stripe references PostgreSQL in its raw_text — should be excluded
       await expect(page.getByText('Stripe')).not.toBeVisible({ timeout: 10_000 })
     })
@@ -138,14 +141,14 @@ test.describe('Job Filtering Module', () => {
       await requiredInput.fill('re:Senior|Staff')
       await page.getByRole('button', { name: /Save|Apply/i }).click()
 
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       // Mid-level postings (Linear, Supabase) should be filtered out
       await expect(page.getByText('Linear')).not.toBeVisible({ timeout: 10_000 })
     })
 
     test('modifying a keyword after commit takes retroactive effect without re-scrape', async ({ page }) => {
       // Verify all postings visible initially
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText('Stripe')).toBeVisible()
 
       // Now add an exclusion keyword
@@ -156,7 +159,7 @@ test.describe('Job Filtering Module', () => {
       await page.getByRole('button', { name: /Save|Apply/i }).click()
 
       // Return to job board — no re-scrape performed, but Stripe should be gone
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       await expect(page.getByText('Stripe')).not.toBeVisible({ timeout: 10_000 })
     })
 
@@ -167,7 +170,7 @@ test.describe('Job Filtering Module', () => {
       await excludedStackInput.fill('TypeScript')
       await page.getByRole('button', { name: /Save|Apply/i }).click()
 
-      await goTo(page, 'Job Board')
+      await goTo(page, 'Jobs')
       // Linear (TypeScript, React, GraphQL) should be excluded
       await expect(page.getByText('Linear')).not.toBeVisible({ timeout: 10_000 })
       // Fly.io (Go, Rust) should still appear

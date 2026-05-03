@@ -115,6 +115,10 @@ export interface JobPosting {
   last_seen_at: string
 }
 
+export interface TrackerPosting extends JobPosting {
+  applied_at: string | null
+}
+
 export interface SearchConfigRow {
   intent: string | null
   term_generation_hash: string | null
@@ -146,6 +150,11 @@ export interface AdapterProgress {
   status: 'running' | 'done' | 'error'
   fetched?: number
   error?: string
+}
+
+export interface CaptchaRequest {
+  adapterId: string
+  adapterName: string
 }
 
 // ─── Search terms ─────────────────────────────────────────────────────────────
@@ -326,14 +335,15 @@ export interface ElectronAPI {
   // Jobs
   listAdapters(): Promise<AdapterInfo[]>
   runScrape(adapterIds?: string[]): Promise<ScrapeSummary>
-  commitScrape(): Promise<void>
-  discardScrape(): Promise<void>
+  pauseScrape(): Promise<void>
+  resumeScrape(): Promise<void>
+  abortScrape(): Promise<void>
   getPostings(): Promise<JobPosting[]>
   updatePostingStatus(id: string, status: PostingStatus): Promise<void>
   deletePostings(ids: string[]): Promise<void>
 
   // Tracker
-  getTrackerPostings(): Promise<JobPosting[]>
+  getTrackerPostings(): Promise<TrackerPosting[]>
 
   // Analytics
   getAnalyticsFunnel(): Promise<FunnelSummary>
@@ -351,6 +361,9 @@ export interface ElectronAPI {
 
   // Events
   onScrapingCommitted(cb: () => void): void
+  onPostingCommitted(cb: (posting: JobPosting) => void): (() => void)
   onAffinityUpdated(cb: (postings: JobPosting[]) => void): void
   onAdapterProgress(cb: (p: AdapterProgress) => void): void
+  onCaptchaRequired(cb: (req: CaptchaRequest) => void): void
+  resolveCaptcha(adapterId: string): Promise<void>
 }

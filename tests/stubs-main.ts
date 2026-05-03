@@ -22,9 +22,16 @@ import { getFilteredRankedPostings } from '../core/jobs/ranker'
 export function registerTestStubs(): void {
   // ─── Scrape — add a small delay so the 'Running…' UI state is observable ────
   ipcMain.removeHandler('jobs:run-scrape')
-  ipcMain.handle('jobs:run-scrape', async () => {
+  ipcMain.handle('jobs:run-scrape', async (event) => {
     await new Promise((resolve) => setTimeout(resolve, 500))
-    return runScrape(getDb(), [new MockAdapter()])
+    await runScrape(
+      getDb(),
+      [new MockAdapter()],
+      undefined,
+      undefined,
+      (posting) => { event.sender.send('jobs:posting-committed', posting) },
+    )
+    event.sender.send('jobs:scrape-committed')
   })
 
   // ─── Search term generation ─────────────────────────────────────────────────
@@ -50,6 +57,7 @@ export function registerTestStubs(): void {
   })
 
   // ─── Search term generation from profile ────────────────────────────────────
+  ipcMain.removeHandler('search-terms:generate-from-profile')
   ipcMain.handle('search-terms:generate-from-profile', () => {
     const db = getDb()
     const now = new Date().toISOString()

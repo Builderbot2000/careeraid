@@ -13,6 +13,7 @@ import sql011 from './011_applications_name.sql?raw'
 import sql012 from './012_search_terms_multiselect.sql?raw'
 import sql013 from './013_salary_company_rating.sql?raw'
 import sql014 from './014_typst.sql?raw'
+import sql015 from './015_job_postings_applied_at.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -33,6 +34,7 @@ const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '012_search_terms_multiselect.sql', sql: sql012 },
   { filename: '013_salary_company_rating.sql', sql: sql013 },
   { filename: '014_typst.sql', sql: sql014 },
+  { filename: '015_job_postings_applied_at.sql', sql: sql015 },
 ]
 
 export function runMigrations(

@@ -1,18 +1,14 @@
 import Database from 'better-sqlite3'
 import { randomUUID } from 'crypto'
-import type { JobPosting, SearchFilters } from './adapters/base'
+import type { JobPosting, SearchFilters, CrawlController, CrawlSignal } from './adapters/base'
 import type { BaseAdapter } from './adapters/base'
 import type { AdapterProgress, ScrapeSummary } from '../../src/shared/ipc-types'
-
-// In-memory staging buffer — held between runScrape and commitScrape/discardScrape.
-// Safe because all IPC calls execute synchronously on the main process.
-let staged: JobPosting[] | null = null
 
 function compositeKey(company: string, title: string, posted_at: string | null): string {
   return `${company.toLowerCase()}::${title.toLowerCase().replace(/\s+/g, ' ').trim()}::${posted_at ?? ''}`
 }
 
-// ─── Pre-commit filters ───────────────────────────────────────────────────────
+// ─── Filters ──────────────────────────────────────────────────────────────────
 
 function matchesCompanyBan(company: string, pattern: string): boolean {
   try {
@@ -20,36 +16,6 @@ function matchesCompanyBan(company: string, pattern: string): boolean {
   } catch {
     return company.toLowerCase().includes(pattern.toLowerCase())
   }
-}
-
-function applyBanList(
-  db: Database.Database,
-  postings: JobPosting[],
-): { filtered: JobPosting[]; excluded: number } {
-  const bans = db.prepare('SELECT type, value FROM ban_list').all() as {
-    type: 'company' | 'domain'
-    value: string
-  }[]
-  if (bans.length === 0) return { filtered: postings, excluded: 0 }
-
-  const companyBans = bans.filter((b) => b.type === 'company').map((b) => b.value)
-  const domainBans = new Set(bans.filter((b) => b.type === 'domain').map((b) => b.value))
-
-  const filtered: JobPosting[] = []
-  let excluded = 0
-
-  for (const p of postings) {
-    const banned =
-      companyBans.some((pat) => matchesCompanyBan(p.company, pat)) ||
-      (p.resolved_domain !== null && domainBans.has(p.resolved_domain))
-    if (banned) {
-      excluded++
-    } else {
-      filtered.push(p)
-    }
-  }
-
-  return { filtered, excluded }
 }
 
 function parseJsonArray(raw: string | null | undefined): string[] {
@@ -62,64 +28,135 @@ function parseJsonArray(raw: string | null | undefined): string[] {
   }
 }
 
-function applyKeywordFilters(
-  db: Database.Database,
-  postings: JobPosting[],
-): { filtered: JobPosting[]; excluded: number } {
-  const configRow = db
-    .prepare(
-      'SELECT required_keywords, excluded_keywords, keyword_match_fields FROM search_config WHERE id = 1',
-    )
-    .get() as
-    | { required_keywords: string; excluded_keywords: string; keyword_match_fields: string }
-    | undefined
+// ─── Crawl controller ─────────────────────────────────────────────────────────
 
-  const required = parseJsonArray(configRow?.required_keywords)
-  const excluded = parseJsonArray(configRow?.excluded_keywords)
-  const matchFields = parseJsonArray(configRow?.keyword_match_fields).length
-    ? parseJsonArray(configRow?.keyword_match_fields)
-    : ['title', 'tech_stack']
+export function createCrawlController(): CrawlController {
+  let paused = false
+  let aborted = false
+  let resumeResolve: (() => void) | null = null
 
-  if (required.length === 0 && excluded.length === 0) {
-    return { filtered: postings, excluded: 0 }
+  const signal: CrawlSignal = {
+    get aborted() { return aborted },
+    async waitForResume() {
+      if (!paused) return
+      await new Promise<void>((res) => { resumeResolve = res })
+    },
+    checkAborted() {
+      if (aborted) throw new Error('crawl_aborted')
+    },
   }
 
-  const result: JobPosting[] = []
-  let excludedCount = 0
+  return {
+    signal,
+    pause() { paused = true },
+    resume() {
+      paused = false
+      resumeResolve?.()
+      resumeResolve = null
+    },
+    abort() {
+      aborted = true
+      paused = false
+      resumeResolve?.()
+      resumeResolve = null
+    },
+  }
+}
 
-  for (const p of postings) {
+// ─── Per-posting insert ───────────────────────────────────────────────────────
+
+const INSERT_SQL = `
+  INSERT INTO job_postings (
+    id, source, url, resolved_domain, title, company, location,
+    yoe_min, yoe_max, seniority, tech_stack, posted_at, applicant_count,
+    raw_text, fetched_at, scraper_mod_version, status,
+    affinity_score, affinity_skipped, affinity_scored_at, first_response_at, last_seen_at,
+    salary_min, salary_max, company_rating
+  ) VALUES (
+    @id, @source, @url, @resolved_domain, @title, @company, @location,
+    @yoe_min, @yoe_max, @seniority, @tech_stack, @posted_at, @applicant_count,
+    @raw_text, @fetched_at, @scraper_mod_version, @status,
+    @affinity_score, @affinity_skipped, @affinity_scored_at, @first_response_at, @last_seen_at,
+    @salary_min, @salary_max, @company_rating
+  )
+`
+
+interface Counters {
+  fetched: number
+  dupes: number
+  ban_excluded: number
+  keyword_filtered: number
+  netNew: number
+}
+
+function processPosting(
+  db: Database.Database,
+  insert: ReturnType<Database.Database['prepare']>,
+  posting: Omit<JobPosting, 'id'>,
+  existingUrls: Set<string>,
+  existingComposites: Set<string>,
+  banConfig: { companyBans: string[]; domainBans: Set<string> },
+  keywordConfig: { required: string[]; excluded: string[]; matchFields: string[] },
+  counters: Counters,
+): JobPosting | null {
+  counters.fetched++
+
+  // Dedup
+  const ck = compositeKey(posting.company, posting.title, posting.posted_at)
+  if (existingUrls.has(posting.url) || existingComposites.has(ck)) {
+    counters.dupes++
+    return null
+  }
+
+  // Ban list
+  const banned =
+    banConfig.companyBans.some((pat) => matchesCompanyBan(posting.company, pat)) ||
+    (posting.resolved_domain !== null && banConfig.domainBans.has(posting.resolved_domain))
+  if (banned) {
+    counters.ban_excluded++
+    return null
+  }
+
+  // Keyword filter
+  if (keywordConfig.required.length > 0 || keywordConfig.excluded.length > 0) {
     const parts: string[] = []
-    if (matchFields.includes('title')) parts.push(p.title)
-    if (matchFields.includes('tech_stack')) parts.push(...p.tech_stack)
-    if (matchFields.includes('raw_text') && p.raw_text) parts.push(p.raw_text)
+    if (keywordConfig.matchFields.includes('title')) parts.push(posting.title)
+    if (keywordConfig.matchFields.includes('tech_stack')) parts.push(...posting.tech_stack)
+    if (keywordConfig.matchFields.includes('raw_text') && posting.raw_text) parts.push(posting.raw_text)
     const haystack = parts.join(' ').toLowerCase()
 
-    let keep = true
-
-    for (const kw of excluded) {
+    for (const kw of keywordConfig.excluded) {
       const pattern = kw.startsWith('re:') ? new RegExp(kw.slice(3), 'i') : kw.toLowerCase()
       if (typeof pattern === 'string' ? haystack.includes(pattern) : pattern.test(haystack)) {
-        keep = false
-        break
+        counters.keyword_filtered++
+        return null
       }
     }
 
-    if (keep && required.length > 0) {
-      const ok = required.some((kw) => {
+    if (keywordConfig.required.length > 0) {
+      const ok = keywordConfig.required.some((kw) => {
         const pattern = kw.startsWith('re:') ? new RegExp(kw.slice(3), 'i') : kw.toLowerCase()
         return typeof pattern === 'string' ? haystack.includes(pattern) : pattern.test(haystack)
       })
-      if (!ok) keep = false
-    }
-
-    if (keep) {
-      result.push(p)
-    } else {
-      excludedCount++
+      if (!ok) {
+        counters.keyword_filtered++
+        return null
+      }
     }
   }
 
-  return { filtered: result, excluded: excludedCount }
+  // Insert
+  const full: JobPosting = { ...posting, id: randomUUID() } as JobPosting
+  insert.run({
+    ...full,
+    tech_stack: JSON.stringify(full.tech_stack),
+    affinity_skipped: full.affinity_skipped ? 1 : 0,
+  })
+
+  existingUrls.add(full.url)
+  existingComposites.add(ck)
+  counters.netNew++
+  return full
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -128,6 +165,9 @@ export async function runScrape(
   db: Database.Database,
   adapters: BaseAdapter[],
   onProgress?: (p: AdapterProgress) => void,
+  onCaptchaRequired?: (adapterId: string) => Promise<void>,
+  onPostingCommitted?: (p: JobPosting) => void,
+  controller?: CrawlController,
 ): Promise<ScrapeSummary> {
   // Collect existing URLs and composite keys from DB for dedup
   const existingUrls = new Set<string>(
@@ -142,9 +182,30 @@ export async function runScrape(
     ).map((r) => compositeKey(r.company, r.title, r.posted_at)),
   )
 
-  const results: JobPosting[] = []
-  let fetched = 0
-  let dupes = 0
+  const counters: Counters = { fetched: 0, dupes: 0, ban_excluded: 0, keyword_filtered: 0, netNew: 0 }
+
+  // Load ban list once
+  const bans = db.prepare('SELECT type, value FROM ban_list').all() as {
+    type: 'company' | 'domain'; value: string
+  }[]
+  const banConfig = {
+    companyBans: bans.filter((b) => b.type === 'company').map((b) => b.value),
+    domainBans: new Set(bans.filter((b) => b.type === 'domain').map((b) => b.value)),
+  }
+
+  // Load keyword config once
+  const configRow = db
+    .prepare('SELECT required_keywords, excluded_keywords, keyword_match_fields FROM search_config WHERE id = 1')
+    .get() as { required_keywords: string; excluded_keywords: string; keyword_match_fields: string } | undefined
+  const keywordConfig = {
+    required: parseJsonArray(configRow?.required_keywords),
+    excluded: parseJsonArray(configRow?.excluded_keywords),
+    matchFields: parseJsonArray(configRow?.keyword_match_fields).length
+      ? parseJsonArray(configRow?.keyword_match_fields)
+      : ['title', 'tech_stack'],
+  }
+
+  const insert = db.prepare(INSERT_SQL)
 
   // Load all enabled terms once — they are adapter-global.
   type TermRow = {
@@ -199,11 +260,10 @@ export async function runScrape(
     }
   }
 
-  const adapterResults = await Promise.allSettled(
+  await Promise.allSettled(
     adapters.map(async (adapter) => {
       onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
       let adapterFetched = 0
-      const adapterPostings: Omit<JobPosting, 'id'>[] = []
 
       for (const run of expandedRuns) {
         const filters: SearchFilters = {}
@@ -213,105 +273,46 @@ export async function runScrape(
         if (run.recency) filters.recency = run.recency
         if (run.maxResults != null) filters.maxResults = run.maxResults
 
-        let postings: Awaited<ReturnType<typeof adapter.search>>
         try {
-          postings = await adapter.search(run.term, filters, () => {
-            adapterFetched++
-            onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
-          })
+          await adapter.search(
+            run.term,
+            filters,
+            (posting) => {
+              adapterFetched++
+              onProgress?.({ adapterId: adapter.id, status: 'running', fetched: adapterFetched })
+              const committed = processPosting(
+                db, insert, posting,
+                existingUrls, existingComposites,
+                banConfig, keywordConfig, counters,
+              )
+              if (committed) onPostingCommitted?.(committed)
+            },
+            onCaptchaRequired ? () => onCaptchaRequired(adapter.id) : undefined,
+            controller?.signal,
+          )
         } catch (err) {
+          if (err instanceof Error && err.message === 'crawl_aborted') {
+            onProgress?.({ adapterId: adapter.id, status: 'done', fetched: adapterFetched })
+            return
+          }
           onProgress?.({
             adapterId: adapter.id,
             status: 'error',
             error: err instanceof Error ? err.message : String(err),
           })
-          return { postings: adapterPostings, fetched: adapterFetched }
+          return
         }
-        adapterPostings.push(...postings)
       }
 
       onProgress?.({ adapterId: adapter.id, status: 'done', fetched: adapterFetched })
-      return { postings: adapterPostings, fetched: adapterFetched }
     }),
   )
 
-  for (const settled of adapterResults) {
-    if (settled.status !== 'fulfilled') continue
-
-    const { postings: adapterPostings } = settled.value
-    fetched += adapterPostings.length
-
-    for (const posting of adapterPostings) {
-      if (existingUrls.has(posting.url)) {
-        dupes++
-        continue
-      }
-
-      const ck = compositeKey(posting.company, posting.title, posting.posted_at)
-      if (existingComposites.has(ck)) {
-        dupes++
-        continue
-      }
-
-      // In-memory dedup against already-staged postings in this run
-      const alreadyStaged = results.some(
-        (r) => r.url === posting.url || compositeKey(r.company, r.title, r.posted_at) === ck,
-      )
-      if (alreadyStaged) {
-        dupes++
-        continue
-      }
-
-      // Aggregator assigns the canonical DB id
-      results.push({ ...posting, id: randomUUID() } as JobPosting)
-    }
+  return {
+    fetched: counters.fetched,
+    dupes: counters.dupes,
+    netNew: counters.netNew,
+    ban_excluded: counters.ban_excluded,
+    keyword_filtered: counters.keyword_filtered,
   }
-
-  // PRE_COMMIT_FILTER: ban list → keyword filter
-  const { filtered: afterBan, excluded: ban_excluded } = applyBanList(db, results)
-  const { filtered: afterKeyword, excluded: keyword_filtered } = applyKeywordFilters(db, afterBan)
-
-  staged = afterKeyword
-
-  return { fetched, dupes, netNew: afterKeyword.length, ban_excluded, keyword_filtered }
-}
-
-export function commitScrape(db: Database.Database): void {
-  if (!staged || staged.length === 0) {
-    staged = null
-    return
-  }
-
-  const insert = db.prepare(`
-    INSERT INTO job_postings (
-      id, source, url, resolved_domain, title, company, location,
-      yoe_min, yoe_max, seniority, tech_stack, posted_at, applicant_count,
-      raw_text, fetched_at, scraper_mod_version, status,
-      affinity_score, affinity_skipped, affinity_scored_at, first_response_at, last_seen_at,
-      salary_min, salary_max, company_rating
-    ) VALUES (
-      @id, @source, @url, @resolved_domain, @title, @company, @location,
-      @yoe_min, @yoe_max, @seniority, @tech_stack, @posted_at, @applicant_count,
-      @raw_text, @fetched_at, @scraper_mod_version, @status,
-      @affinity_score, @affinity_skipped, @affinity_scored_at, @first_response_at, @last_seen_at,
-      @salary_min, @salary_max, @company_rating
-    )
-  `)
-
-  const bulk = db.transaction((postings: JobPosting[]) => {
-    for (const p of postings) {
-      insert.run({
-        ...p,
-        tech_stack: JSON.stringify(p.tech_stack),
-        affinity_skipped: p.affinity_skipped ? 1 : 0,
-      })
-    }
-  })
-
-  bulk(staged)
-  staged = null
-}
-
-export function discardScrape(): void {
-  staged = null
 }

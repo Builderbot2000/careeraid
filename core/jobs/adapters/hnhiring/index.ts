@@ -1,6 +1,6 @@
 import fetch from 'node-fetch'
 import { load } from 'cheerio'
-import { BaseAdapter, type JobPosting, type SearchFilters } from '../base'
+import { BaseAdapter, type JobPosting, type SearchFilters, type CrawlSignal } from '../base'
 import { extractYoe, extractSeniority, extractTechStack } from '../linkedin'
 
 const SOURCE = 'hnhiring'
@@ -161,33 +161,36 @@ export class HNHiringAdapter extends BaseAdapter {
   async search(
     _term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    _onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
     const maxResults = filters.maxResults ?? 100
     const cutoff     = filters.recency ? recencyCutoffDate(filters.recency) : null
 
     const slug = await fetchCurrentMonthSlug()
-    if (!slug) return []
+    if (!slug) return
 
     const response = await fetch(buildListingUrl(slug))
-    if (!response.ok) return []
+    if (!response.ok) return
 
     const html     = await response.text()
     const postings = parsePostings(html)
 
-    const results: Omit<JobPosting, 'id'>[] = []
+    let reportedCount = 0
 
     for (const posting of postings) {
-      if (results.length >= maxResults) break
+      if (reportedCount >= maxResults) break
 
       // Postings are newest-first; stop as soon as we fall below the cutoff.
       if (cutoff !== null && posting.posted_at !== null && posting.posted_at < cutoff) break
 
-      results.push(posting)
-      onPosting?.()
-    }
+      await signal?.waitForResume()
+      signal?.checkAborted()
 
-    return results
+      onPosting?.(posting)
+      reportedCount++
+    }
   }
 }
 

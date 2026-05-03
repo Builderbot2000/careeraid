@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import type { JobPosting, PostingStatus } from '../shared/ipc-types'
+import type { TrackerPosting, PostingStatus } from '../shared/ipc-types'
 import { Pagination } from '../components/Pagination'
 
 const PAGE_SIZE = 20
@@ -29,7 +29,7 @@ function formatDate(iso: string | null): string {
 }
 
 export default function Tracker(): React.ReactElement {
-    const [postings, setPostings] = useState<JobPosting[]>([])
+    const [postings, setPostings] = useState<TrackerPosting[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
@@ -46,7 +46,8 @@ export default function Tracker(): React.ReactElement {
     async function handleStatusChange(id: string, status: PostingStatus): Promise<void> {
         try {
             await window.api.updatePostingStatus(id, status)
-            setPostings((prev) => prev.map((p) => (p.id === id ? { ...p, status } : p)))
+            const applied_at = status === 'applied' ? new Date().toISOString() : undefined
+            setPostings((prev) => prev.map((p) => (p.id === id ? { ...p, status, ...(applied_at !== undefined && p.applied_at == null ? { applied_at } : {}) } : p)))
         } catch (err) {
             console.error('Failed to update status', err)
         }
@@ -135,9 +136,10 @@ export default function Tracker(): React.ReactElement {
                             />
                         </th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Company</th>
+                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Applied</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Role</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Source</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Last Updated</th>
+                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Last Seen</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Status</th>
                         <th style={{ padding: '8px 0', fontWeight: 600, color: '#374151' }}>Link</th>
                     </tr>
@@ -154,6 +156,7 @@ export default function Tracker(): React.ReactElement {
                                 />
                             </td>
                             <td style={{ padding: '10px 12px 10px 0', fontWeight: 600 }}>{posting.company}</td>
+                            <td style={{ padding: '10px 12px 10px 0', color: '#6b7280', whiteSpace: 'nowrap' }}>{formatDate(posting.applied_at)}</td>
                             <td
                                 style={{
                                     padding: '10px 12px 10px 0',

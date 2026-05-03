@@ -57,7 +57,7 @@ export const test = base.extend<AppFixtures>({
 
 /** Click a top-level nav item by its visible label. */
 export async function navigate(page: Page, label: string): Promise<void> {
-  await page.getByRole('button', { name: label }).click()
+  await page.getByRole('button', { name: label, exact: true }).click()
 }
 
 /** Navigate to a view and wait for a heading or landmark to confirm arrival. */
@@ -70,15 +70,12 @@ export async function goTo(page: Page, label: string): Promise<void> {
 // ─── Scrape helpers ───────────────────────────────────────────────────────────
 
 /**
- * Run a full mock scrape and commit the results.
- * After this call, 15 postings are in the database.
+ * Run a mock scrape and wait for it to complete.
+ * After this call, 15 postings are in the database (auto-committed during crawl).
  */
 export async function runAndCommitScrape(page: Page): Promise<void> {
-  await goTo(page, 'Search Config')
+  await goTo(page, 'Search')
   await page.getByRole('button', { name: /Run Scrape/i }).click()
-  // Wait for the commit summary to appear
-  await page.waitForSelector('text=Net new to commit', { timeout: 15_000 })
-  await page.getByRole('button', { name: /Commit/i }).click()
-  // Wait for the commit to complete (summary section disappears)
-  await page.waitForSelector('[data-testid="search-commit-btn"]', { state: 'detached', timeout: 10_000 })
+  // Wait for the Run Scrape button to become enabled again (scrape finished)
+  await expect(page.getByTestId('search-run-scrape-btn')).toBeEnabled({ timeout: 15_000 })
 }

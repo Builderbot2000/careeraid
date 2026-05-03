@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react'
 import type {
-    ScrapeSummary,
     SearchTerm,
     AdapterInfo,
     AdapterProgress,
+    CaptchaRequest,
     AddSearchTermData,
     SearchTermSeniority,
     WorkType,
@@ -16,24 +16,26 @@ import { LocationTagInput } from './LocationTagInput'
 
 export interface ScrapeProps {
     scrapeState: ScrapeState
-    summary: ScrapeSummary | null
     adapterProgress: Record<string, AdapterProgress>
     errorMsg: string | null
-    committing: boolean
+    captchaQueue: CaptchaRequest[]
     onRunScrape: (adapterIds: string[]) => void
-    onCommit: () => void
-    onDiscard: () => void
+    onPause: () => void
+    onResume: () => void
+    onAbort: () => void
+    onResolveCaptcha: (adapterId: string) => void
 }
 
 export function IntentTab({
     scrapeState,
-    summary,
     adapterProgress,
     errorMsg,
-    committing,
+    captchaQueue,
     onRunScrape,
-    onCommit,
-    onDiscard,
+    onPause,
+    onResume,
+    onAbort,
+    onResolveCaptcha,
 }: ScrapeProps): React.ReactElement {
     const [intent, setIntent] = useState('')
     const [terms, setTerms] = useState<SearchTerm[]>([])
@@ -136,14 +138,6 @@ export function IntentTab({
 
     function handleRunScrape(): void {
         onRunScrape(Array.from(selectedAdapters))
-    }
-
-    function handleCommit(): void {
-        onCommit()
-    }
-
-    function handleDiscard(): void {
-        onDiscard()
     }
 
     return (
@@ -438,12 +432,13 @@ export function IntentTab({
                             }}
                         >
                             <input
+                                data-testid={`adapter-checkbox-${adapter.id}`}
                                 type="checkbox"
                                 checked={selectedAdapters.has(adapter.id)}
                                 disabled={
                                     !adapter.available ||
                                     scrapeState === 'running' ||
-                                    scrapeState === 'pending_commit'
+                                    scrapeState === 'paused'
                                 }
                                 onChange={(e) => {
                                     setSelectedAdapters((prev) => {
@@ -473,85 +468,87 @@ export function IntentTab({
                     onClick={handleRunScrape}
                     disabled={
                         scrapeState === 'running' ||
-                        scrapeState === 'pending_commit' ||
+                        scrapeState === 'paused' ||
                         selectedAdapters.size === 0
                     }
                     style={{ padding: '8px 16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
-                    {scrapeState === 'running' ? 'Running…' : 'Run Scrape'}
+                    {scrapeState === 'running' ? 'Running…' : scrapeState === 'paused' ? 'Paused' : 'Run Scrape'}
                 </button>
+
+                {(scrapeState === 'running' || scrapeState === 'paused') && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                        {scrapeState === 'running' ? (
+                            <button
+                                data-testid="search-pause-btn"
+                                onClick={onPause}
+                                style={{ padding: '6px 14px', cursor: 'pointer' }}
+                            >
+                                Pause
+                            </button>
+                        ) : (
+                            <button
+                                data-testid="search-resume-btn"
+                                onClick={onResume}
+                                style={{ padding: '6px 14px', cursor: 'pointer', fontWeight: 600 }}
+                            >
+                                Resume
+                            </button>
+                        )}
+                        <button
+                            data-testid="search-abort-btn"
+                            onClick={onAbort}
+                            style={{ padding: '6px 14px', cursor: 'pointer', color: '#dc2626' }}
+                        >
+                            Stop
+                        </button>
+                    </div>
+                )}
+
+                {captchaQueue.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                        {captchaQueue.map((req) => (
+                            <div
+                                key={req.adapterId}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '12px',
+                                    border: '1px solid #fbbf24',
+                                    borderRadius: '8px',
+                                    padding: '12px 16px',
+                                    background: '#fffbeb',
+                                    fontSize: '0.875rem',
+                                }}
+                            >
+                                <span style={{ fontSize: '1.1rem' }}>&#9888;&#65039;</span>
+                                <span style={{ flex: 1 }}>
+                                    <strong>{req.adapterName}</strong> is paused for captcha verification.
+                                    Solve it in the browser window that opened, then click <strong>Continue</strong>.
+                                </span>
+                                <button
+                                    onClick={() => onResolveCaptcha(req.adapterId)}
+                                    style={{
+                                        padding: '6px 14px',
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        background: '#2563eb',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: '6px',
+                                        flexShrink: 0,
+                                    }}
+                                >
+                                    Continue
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {scrapeState === 'error' && errorMsg && (
                     <div data-testid="search-error" style={{ marginTop: '12px', color: 'crimson', fontSize: '0.85rem' }}>
                         {errorMsg}
-                    </div>
-                )}
-
-                {scrapeState === 'pending_commit' && summary && (
-                    <div
-                        data-testid="search-summary"
-                        style={{
-                            marginTop: '16px',
-                            border: '1px solid #d1d5db',
-                            borderRadius: '8px',
-                            padding: '20px',
-                            background: '#f9fafb',
-                        }}
-                    >
-                        <h4 style={{ margin: '0 0 10px', fontSize: '0.95rem' }}>Scrape Complete</h4>
-                        <table style={{ borderCollapse: 'collapse', fontSize: '0.875rem', width: '100%' }}>
-                            <tbody>
-                                <tr>
-                                    <td style={{ padding: '3px 12px 3px 0', color: '#6b7280' }}>Fetched</td>
-                                    <td style={{ fontWeight: 600 }}>{summary.fetched}</td>
-                                </tr>
-                                <tr>
-                                    <td style={{ padding: '3px 12px 3px 0', color: '#6b7280' }}>Duplicates skipped</td>
-                                    <td>{summary.dupes}</td>
-                                </tr>
-                                {summary.ban_excluded > 0 && (
-                                    <tr>
-                                        <td style={{ padding: '3px 12px 3px 0', color: '#6b7280' }}>Ban list excluded</td>
-                                        <td>{summary.ban_excluded}</td>
-                                    </tr>
-                                )}
-                                {summary.keyword_filtered > 0 && (
-                                    <tr>
-                                        <td style={{ padding: '3px 12px 3px 0', color: '#6b7280' }}>Keyword filtered</td>
-                                        <td>{summary.keyword_filtered}</td>
-                                    </tr>
-                                )}
-                                <tr>
-                                    <td style={{ padding: '3px 12px 3px 0', color: '#6b7280' }}>Net new to commit</td>
-                                    <td
-                                        style={{
-                                            fontWeight: 600,
-                                            color: summary.netNew > 0 ? '#16a34a' : '#6b7280',
-                                        }}
-                                    >
-                                        {summary.netNew}
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <div style={{ marginTop: '14px', display: 'flex', gap: '8px' }}>
-                            <button
-                                data-testid="search-commit-btn"
-                                onClick={handleCommit}
-                                disabled={committing || summary.netNew === 0}
-                                style={{ padding: '8px 20px', fontWeight: 600, cursor: 'pointer' }}
-                            >
-                                {committing ? 'Committing…' : `Commit ${summary.netNew} postings`}
-                            </button>
-                            <button
-                                data-testid="search-discard-btn"
-                                onClick={handleDiscard}
-                                disabled={committing}
-                                style={{ padding: '8px 16px', cursor: 'pointer' }}
-                            >
-                                Discard
-                            </button>
-                        </div>
                     </div>
                 )}
             </section>

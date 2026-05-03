@@ -136,6 +136,10 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
             <div className="card">
                 <h2>Paths</h2>
                 <div className="form-row">
+                    <label>PDF compiler</label>
+                    <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>Bundled binary</span>
+                </div>
+                <div className="form-row">
                     <label>PDF export path</label>
                     <input
                         type="text"

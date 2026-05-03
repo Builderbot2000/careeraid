@@ -1,11 +1,11 @@
 import { BaseAdapter } from '../base'
-import type { JobPosting, SearchFilters, Seniority } from '../base'
+import type { JobPosting, SearchFilters, Seniority, CrawlSignal } from '../base'
 
 const MOD_VERSION = '0.2.0-mock'
 const SOURCE = 'mock'
 
-// 120ms per result in dev; 0 in test so the suite stays fast
-const CRAWL_DELAY_MS = process.env.CAREERAID_TEST === '1' ? 0 : 120
+// 120ms per result in dev; 100ms in test (enough for Pause/Stop interaction tests)
+const CRAWL_DELAY_MS = process.env.CAREERAID_TEST === '1' ? 100 : 120
 
 // How many results to return per crawl (simulates a page of results)
 const RESULTS_PER_CRAWL_MIN = 15
@@ -436,33 +436,38 @@ export class MockAdapter extends BaseAdapter {
   override async search(
     _term: string,
     _filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    _onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
     const now = new Date().toISOString()
-    const rawCount =
-      RESULTS_PER_CRAWL_MIN +
-      Math.floor(Math.random() * (RESULTS_PER_CRAWL_MAX - RESULTS_PER_CRAWL_MIN + 1))
+    const isTest = process.env.CAREERAID_TEST === '1'
+    const rawCount = isTest
+      ? RESULTS_PER_CRAWL_MIN
+      : RESULTS_PER_CRAWL_MIN + Math.floor(Math.random() * (RESULTS_PER_CRAWL_MAX - RESULTS_PER_CRAWL_MIN + 1))
     const count = _filters.maxResults != null ? Math.min(rawCount, _filters.maxResults) : rawCount
 
-    // Fisher-Yates shuffle, take first `count`
+    // Fisher-Yates shuffle (skipped in test mode for deterministic deduplication)
     const pool = MOCK_POOL.slice()
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1))
-      ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    if (!isTest) {
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1))
+        ;[pool[i], pool[j]] = [pool[j], pool[i]]
+      }
     }
 
-    const results: Omit<JobPosting, 'id'>[] = []
     for (const posting of pool.slice(0, count)) {
+      await signal?.waitForResume()
+      signal?.checkAborted()
+
       if (this.delayMs > 0) {
         // Vary the delay ±40% to mimic real page-load jitter
         const jitter = this.delayMs * 0.4
         const delay = this.delayMs - jitter + Math.random() * jitter * 2
         await new Promise((r) => setTimeout(r, delay))
       }
-      results.push({ ...posting, fetched_at: now, last_seen_at: now })
-      onPosting?.()
+      onPosting?.({ ...posting, fetched_at: now, last_seen_at: now })
     }
-    return results
   }
 }
 

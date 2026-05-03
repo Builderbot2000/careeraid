@@ -1,6 +1,6 @@
 import fetch from 'node-fetch'
 import { load } from 'cheerio'
-import { BaseAdapter, type JobPosting, type SearchFilters } from '../base'
+import { BaseAdapter, type JobPosting, type SearchFilters, type CrawlSignal } from '../base'
 import { extractYoe, extractSeniority, extractTechStack } from '../linkedin'
 
 const SOURCE = 'hackernews'
@@ -92,19 +92,24 @@ export class HackerNewsAdapter extends BaseAdapter {
   async search(
     _term: string,
     filters: SearchFilters,
-    onPosting?: () => void,
-  ): Promise<Omit<JobPosting, 'id'>[]> {
-    const results: Omit<JobPosting, 'id'>[] = []
+    onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
+    _onCaptchaRequired?: () => Promise<void>,
+    signal?: CrawlSignal,
+  ): Promise<void> {
+    let reportedCount = 0
     const maxResults = filters.maxResults ?? PAGE_SIZE * MAX_PAGES
     const cutoff = filters.recency ? recencyCutoffTs(filters.recency) : null
 
     let page       = 0
     let totalPages = 1
 
-    while (page < totalPages && page < MAX_PAGES && results.length < maxResults) {
+    while (page < totalPages && page < MAX_PAGES && reportedCount < maxResults) {
+      await signal?.waitForResume()
+      signal?.checkAborted()
+
       const params = new URLSearchParams({
         tags:        'job',
-        hitsPerPage: String(Math.min(PAGE_SIZE, maxResults - results.length)),
+        hitsPerPage: String(Math.min(PAGE_SIZE, maxResults - reportedCount)),
         page:        String(page),
       })
       if (cutoff !== null) {
@@ -118,7 +123,7 @@ export class HackerNewsAdapter extends BaseAdapter {
       totalPages = data.nbPages
 
       for (const hit of data.hits) {
-        if (results.length >= maxResults) break
+        if (reportedCount >= maxResults) break
 
         const parsed = parseHNTitle(hit.title)
         const url    = hit.url ?? `${HN_ITEM_BASE}?id=${hit.objectID}`
@@ -138,7 +143,7 @@ export class HackerNewsAdapter extends BaseAdapter {
         const posted_at   = hit.created_at.slice(0, 10)
         const now         = new Date().toISOString()
 
-        results.push({
+        onPosting?.({
           source:              SOURCE,
           url,
           resolved_domain:     null,
@@ -165,17 +170,14 @@ export class HackerNewsAdapter extends BaseAdapter {
           salary_max:          null,
           company_rating:      null,
         })
-
-        onPosting?.()
+        reportedCount++
       }
 
-      if (page < totalPages - 1 && results.length < maxResults) {
+      if (page < totalPages - 1 && reportedCount < maxResults) {
         await new Promise<void>(resolve => setTimeout(resolve, this.delayMs))
       }
       page++
     }
-
-    return results
   }
 }
 
