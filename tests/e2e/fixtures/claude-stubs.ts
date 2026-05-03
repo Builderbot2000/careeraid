@@ -74,17 +74,21 @@ export const STUB_PDF_IMPORT_ENTRIES: Omit<import('../../../src/shared/ipc-types
 ]
 
 // ─── Affinity scoring stub ────────────────────────────────────────────────────
-// Returns a scoring result for every posting ID passed in.
-// Callers should map their posting IDs over this to produce the response array.
+// Returns a per-dimension qualification result for a posting.
+// hard_reqs_class + nice_to_haves_class → formula → affinity_score (0.875).
 
 export function stubAffinityScore(postingId: string): {
   posting_id: string
+  hard_reqs_class: 'fully_qualified'
+  nice_to_haves_class: 'partially_met'
   affinity_score: number
   reasoning: string
 } {
   return {
     posting_id: postingId,
-    affinity_score: 0.82,
+    hard_reqs_class: 'fully_qualified',
+    nice_to_haves_class: 'partially_met',
+    affinity_score: 0.875, // 0.75 * 1.0 + 0.25 * 0.5
     reasoning: 'Strong match on backend systems experience and required tech stack.',
   }
 }

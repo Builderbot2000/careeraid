@@ -14,7 +14,7 @@ const MAX_RETRIES = 2
 
 // ─── Prompt construction ──────────────────────────────────────────────────────
 
-function serializeProfile(entries: ProfileEntry[]): string {
+export function serializeProfile(entries: ProfileEntry[]): string {
   return entries
     .map((e) => {
       const dateRange =

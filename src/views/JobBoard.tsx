@@ -228,6 +228,8 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                     <AffinityBadge
                                         score={posting.affinity_score}
                                         skipped={posting.affinity_skipped}
+                                        hardReqsClass={posting.hard_reqs_class}
+                                        niceToHavesClass={posting.nice_to_haves_class}
                                     />
                                 </span>
                             </td>

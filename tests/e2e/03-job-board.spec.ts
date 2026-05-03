@@ -18,12 +18,23 @@ test.describe('Job Board & Ranking Module', () => {
     await expect(page.getByText(/remote/i).first()).toBeVisible()
   })
 
-  test('affinity score badges are visible on postings', async ({ page }) => {
-    // Stub returns 0.82 for all postings → should render green (≥75%)
-    // Verify at least one badge is present
-    const badge = page.locator('[data-testid="affinity-badge"], .affinity-badge').first()
-      .or(page.getByText(/82%|0\.82/i).first())
+  test('affinity badges show a qualification class label', async ({ page }) => {
+    // Stub scores all postings as fully_qualified + partially_met
+    await expect(page.getByText('Fully Qualified').first()).toBeVisible({ timeout: 10_000 })
+  })
+
+  test('affinity badge displays a class label, not a raw percentage', async ({ page }) => {
+    await expect(page.getByText('Fully Qualified').first()).toBeVisible({ timeout: 10_000 })
+    // No percentage text should appear in badges
+    await expect(page.getByText(/\d+%/).first()).not.toBeVisible()
+  })
+
+  test('affinity badge tooltip includes hard-reqs class and nice-to-haves', async ({ page }) => {
+    const badge = page.getByText('Fully Qualified').first()
     await expect(badge).toBeVisible({ timeout: 10_000 })
+    const title = await badge.getAttribute('title')
+    expect(title).toMatch(/Fully Qualified/i)
+    expect(title).toMatch(/nice-to-haves|partially met/i)
   })
 
   test('hovering a posting title shows the affinity reasoning tooltip', async ({ page }) => {

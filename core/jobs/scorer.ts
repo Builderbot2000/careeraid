@@ -3,54 +3,131 @@ import { z } from 'zod'
 import Database from 'better-sqlite3'
 import type { JobPosting } from './adapters/base'
 import { writeLLMUsage } from './llmUsage'
+import { serializeProfile } from '../resume/agent'
+import { getAllEntries } from '../profile/repository'
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5'
-// Chars-per-token approximation for budget estimation
-const CHARS_PER_TOKEN = 4
-// Fixed prompt overhead tokens per batch
-const PROMPT_OVERHEAD_TOKENS = 800
+const MODEL = 'claude-haiku-4-5'
 
-const AffinityItemSchema = z.object({
+// ─── Scoring formula ──────────────────────────────────────────────────────────
+
+const HARD_SCORE: Record<string, number> = {
+  overqualified:       0.70,
+  fully_qualified:     1.00,
+  minimally_qualified: 0.45,
+  underqualified:      0.05,
+}
+
+const NICE_SCORE: Record<string, number> = {
+  fully_met:    1.0,
+  partially_met: 0.5,
+  not_met:      0.0,
+}
+
+function computeAffinityScore(hardClass: string, niceClass: string): number {
+  const h = HARD_SCORE[hardClass] ?? 0.5
+  const n = NICE_SCORE[niceClass] ?? 0.5
+  return 0.75 * h + 0.25 * n
+}
+
+// ─── LLM output schema ────────────────────────────────────────────────────────
+
+const AffinityResultSchema = z.object({
   posting_id: z.string(),
-  affinity_score: z.number().min(0).max(1),
+  hard_reqs_class: z.enum([
+    'overqualified',
+    'fully_qualified',
+    'minimally_qualified',
+    'underqualified',
+  ]),
+  nice_to_haves_class: z.enum(['fully_met', 'partially_met', 'not_met']),
   reasoning: z.string(),
 })
 
-type AffinityItem = z.infer<typeof AffinityItemSchema>
+type AffinityResult = z.infer<typeof AffinityResultSchema>
+
+// ─── Prompt builder ───────────────────────────────────────────────────────────
 
 function buildScoringPrompt(
-  postings: Pick<JobPosting, 'id' | 'title' | 'company' | 'raw_text'>[],
+  postingId: string,
+  title: string,
+  company: string,
+  jobDescription: string,
+  serializedProfile: string,
   intent: string,
 ): string {
-  const items = postings
-    .map((p) => {
-      const text = p.raw_text?.slice(0, 1200) ?? `${p.title} at ${p.company}`
-      return `---\nposting_id: ${p.id}\ntitle: ${p.title}\ncompany: ${p.company}\ndescription: ${text}`
+  return `You are a job-fit evaluator. Analyse whether the candidate meets this job's requirements.
+
+## Search Intent
+${intent}
+
+## Candidate Profile
+${serializedProfile.slice(0, 6000)}
+
+## Job Posting
+posting_id: ${postingId}
+title: ${title}
+company: ${company}
+description:
+${jobDescription.slice(0, 3000)}
+
+## Task
+1. Extract the job's HARD REQUIREMENTS (must-haves: mandatory qualifications, skills, YOE).
+2. Extract NICE-TO-HAVES (preferred but not required).
+3. Evaluate the candidate against each group.
+4. Return ONLY a valid JSON object — no markdown, no commentary:
+
+{
+  "posting_id": "${postingId}",
+  "hard_reqs_class": "<overqualified|fully_qualified|minimally_qualified|underqualified>",
+  "nice_to_haves_class": "<fully_met|partially_met|not_met>",
+  "reasoning": "<one sentence: key fit or gap>"
+}
+
+## Classification Guide
+
+hard_reqs_class:
+- overqualified: candidate clearly exceeds all hard requirements (e.g. 10 YOE for a 2-3 YOE role)
+- fully_qualified: candidate meets all hard requirements
+- minimally_qualified: candidate meets most but has one notable gap (missing a required skill or slightly below YOE minimum)
+- underqualified: candidate fails to meet multiple hard requirements
+
+nice_to_haves_class:
+- fully_met: candidate meets all or nearly all nice-to-haves
+- partially_met: candidate meets some nice-to-haves
+- not_met: candidate meets none of the nice-to-haves`
+}
+
+// ─── Concurrency limiter ──────────────────────────────────────────────────────
+
+function makeSemaphore(concurrency: number) {
+  let running = 0
+  const queue: Array<() => void> = []
+
+  function next(): void {
+    if (queue.length > 0 && running < concurrency) {
+      running++
+      queue.shift()!()
+    }
+  }
+
+  return function limit<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      queue.push(async () => {
+        try {
+          resolve(await fn())
+        } catch (e) {
+          reject(e)
+        } finally {
+          running--
+          next()
+        }
+      })
+      next()
     })
-    .join('\n')
-
-  return `You are a job fit evaluator. Score each job posting for affinity with the user's search intent.
-
-User intent: "${intent}"
-
-Job postings:
-${items}
-
-Return ONLY a valid JSON array — no markdown, no commentary:
-[
-  { "posting_id": "uuid", "affinity_score": 0.0–1.0, "reasoning": "one-sentence explanation" }
-]
-
-Scoring guide:
-- 0.9–1.0: Excellent fit — role, seniority, and tech stack closely match intent
-- 0.6–0.8: Good fit — most criteria match with minor gaps
-- 0.3–0.5: Partial fit — some relevant aspects but significant mismatches
-- 0.0–0.2: Poor fit — fundamentally misaligned with intent`
+  }
 }
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN)
-}
+// ─── Main export ──────────────────────────────────────────────────────────────
 
 export async function scorePostings(
   db: Database.Database,
@@ -59,17 +136,12 @@ export async function scorePostings(
 ): Promise<void> {
   if (candidates.length === 0) return
 
-  const settings = db
-    .prepare('SELECT affinity_token_budget FROM settings WHERE id = 1')
-    .get() as { affinity_token_budget: number }
   const config = db
     .prepare('SELECT affinity_skip_threshold FROM search_config WHERE id = 1')
     .get() as { affinity_skip_threshold: number } | undefined
 
   const skipThreshold = config?.affinity_skip_threshold ?? 15
-  const tokenBudget = settings.affinity_token_budget ?? 80_000
 
-  // Skip threshold: mark all skipped if candidate pool is small
   if (candidates.length < skipThreshold) {
     const updateSkip = db.prepare(
       `UPDATE job_postings
@@ -86,84 +158,84 @@ export async function scorePostings(
     (db.prepare('SELECT intent FROM search_config WHERE id = 1').get() as { intent: string | null })
       ?.intent ?? ''
 
+  const profileEntries = getAllEntries(db)
+  const serializedProfile = serializeProfile(profileEntries)
+
   const client = new Anthropic({ apiKey })
+  const now = new Date().toISOString()
+
   const updatePosting = db.prepare(
     `UPDATE job_postings
-     SET affinity_score = @score, affinity_scored_at = @scored_at, affinity_skipped = 0,
-         affinity_reasoning = @reasoning
+     SET affinity_score      = @score,
+         affinity_scored_at  = @scored_at,
+         affinity_skipped    = 0,
+         affinity_reasoning  = @reasoning,
+         hard_reqs_class     = @hard_reqs_class,
+         nice_to_haves_class = @nice_to_haves_class
      WHERE id = @id`,
   )
 
-  // Build batches by token budget
-  const batches: JobPosting[][] = []
-  let current: JobPosting[] = []
-  let currentTokens = PROMPT_OVERHEAD_TOKENS
+  const limit = makeSemaphore(10)
 
-  for (const p of candidates) {
-    const postingTokens = estimateTokens(
-      `${p.id}${p.title}${p.company}${p.raw_text?.slice(0, 1200) ?? ''}`,
-    )
-    if (current.length > 0 && currentTokens + postingTokens > tokenBudget) {
-      batches.push(current)
-      current = []
-      currentTokens = PROMPT_OVERHEAD_TOKENS
-    }
-    current.push(p)
-    currentTokens += postingTokens
-  }
-  if (current.length > 0) batches.push(current)
+  async function scoreOne(posting: JobPosting): Promise<void> {
+    const jd = posting.raw_text ?? `${posting.title} at ${posting.company}`
 
-  const now = new Date().toISOString()
-
-  for (const batch of batches) {
-    let items: AffinityItem[]
+    let result: AffinityResult
 
     try {
       const response = await client.messages.create({
-        model: DEFAULT_MODEL,
-        max_tokens: 2048,
-        messages: [{ role: 'user', content: buildScoringPrompt(batch, intent) }],
+        model: MODEL,
+        max_tokens: 256,
+        messages: [
+          {
+            role: 'user',
+            content: buildScoringPrompt(
+              posting.id,
+              posting.title,
+              posting.company,
+              jd,
+              serializedProfile,
+              intent,
+            ),
+          },
+        ],
       })
 
       writeLLMUsage(db, {
         call_type: 'affinity_scoring',
-        model: DEFAULT_MODEL,
+        model: MODEL,
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
-        posting_id: null,
+        posting_id: posting.id,
       })
 
       const raw = response.content.find((b) => b.type === 'text')?.text ?? ''
-      const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-      const parsed = JSON.parse(text)
-      if (!Array.isArray(parsed)) throw new Error('Expected array')
-      items = parsed
-        .map((raw: unknown) => AffinityItemSchema.safeParse(raw))
-        .filter((r) => r.success)
-        .map((r) => r.data as AffinityItem)
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
+      const validated = AffinityResultSchema.safeParse(JSON.parse(cleaned))
+      if (!validated.success) throw new Error('schema mismatch')
+      result = validated.data
     } catch {
-      // On batch failure, assign neutral fallback scores (unverified)
-      db.transaction(() => {
-        for (const p of batch) {
-          updatePosting.run({ score: 0.5, scored_at: now, id: p.id, reasoning: null })
-        }
-      })()
-      continue
+      // Leave score null so this posting is retried on the next scoring run
+      updatePosting.run({
+        score: null,
+        scored_at: null,
+        id: posting.id,
+        reasoning: null,
+        hard_reqs_class: null,
+        nice_to_haves_class: null,
+      })
+      return
     }
 
-    // Build a map for fast lookup; postings not in response get fallback
-    const scoreMap = new Map(items.map((i) => [i.posting_id, i]))
-
-    db.transaction(() => {
-      for (const p of batch) {
-        const item = scoreMap.get(p.id)
-        updatePosting.run({
-          score: item ? item.affinity_score : 0.5,
-          reasoning: item ? item.reasoning : null,
-          scored_at: now,
-          id: p.id,
-        })
-      }
-    })()
+    updatePosting.run({
+      score: computeAffinityScore(result.hard_reqs_class, result.nice_to_haves_class),
+      scored_at: now,
+      id: posting.id,
+      reasoning: result.reasoning,
+      hard_reqs_class: result.hard_reqs_class,
+      nice_to_haves_class: result.nice_to_haves_class,
+    })
   }
+
+  await Promise.all(candidates.map((p) => limit(() => scoreOne(p))))
 }

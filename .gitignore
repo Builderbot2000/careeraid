@@ -12,9 +12,11 @@ dist/
 # Electron user data (dev)
 dev-app-update.yml
 
-# Build artifacts
+# Build and test artifacts
 release/
 misc/
+playwright-report/data/
+test-results/
 
 # Bundled Typst binaries (downloaded via scripts/download-typst.mjs)
 bin/
