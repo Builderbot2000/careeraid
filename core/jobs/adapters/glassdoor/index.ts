@@ -340,11 +340,20 @@ export async function extractCards(page: Page): Promise<RawCard[]> {
   })
 }
 
+const JOB_UNAVAILABLE_PATTERNS = [
+  /\bjob is (out of order|ooo)\b/i,
+  /\bthis job (is|has been) (closed|removed|expired|no longer available)\b/i,
+  /\bno longer (available|accepting applications)\b/i,
+  /\bposition (has been|is) (filled|closed)\b/i,
+  /\bjob listing (is|has been) (removed|expired|closed)\b/i,
+]
+
 export interface ParsedDetail {
   raw_text: string | null
   salary_min: number | null
   salary_max: number | null
   company_rating: number | null
+  jobUnavailable: boolean
 }
 
 export async function parseDetail(page: Page): Promise<ParsedDetail> {
@@ -379,7 +388,9 @@ export async function parseDetail(page: Page): Promise<ParsedDetail> {
   const ratingText = (await ratingEl?.textContent())?.trim() ?? ''
   const company_rating = parseRating(ratingText)
 
-  return { raw_text, salary_min, salary_max, company_rating }
+  const jobUnavailable = !!raw_text && JOB_UNAVAILABLE_PATTERNS.some((p) => p.test(raw_text!))
+
+  return { raw_text: jobUnavailable ? null : raw_text, salary_min, salary_max, company_rating, jobUnavailable }
 }
 
 // ─── Auth wall helpers ────────────────────────────────────────────────────────
@@ -605,8 +616,14 @@ export class GlassdoorAdapter extends BaseAdapter {
           }
 
           const detail = await parseDetail(detailPage)
+          console.log(`[glassdoor] [+${Date.now()-t0}ms] detail parsed, raw_text ${detail.raw_text ? `${detail.raw_text.length} chars` : 'null'}${detail.jobUnavailable ? ' (unavailable)' : ''}`)
+
+          if (detail.jobUnavailable) {
+            console.warn(`[glassdoor] job no longer available, skipping: ${jobUrl}`)
+            consecutiveFails = 0
+            continue
+          }
           raw_text = detail.raw_text
-          console.log(`[glassdoor] [+${Date.now()-t0}ms] detail parsed, raw_text ${raw_text ? `${raw_text.length} chars` : 'null'}`)
 
           if (detail.salary_min !== null || detail.salary_max !== null) {
             salary_min = detail.salary_min

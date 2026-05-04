@@ -169,6 +169,7 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Role</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Level</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Location</th>
+                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Source</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Posted</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Fit</th>
                         <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Status</th>
@@ -223,6 +224,7 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                 {posting.seniority !== 'any' ? posting.seniority : '—'}
                             </td>
                             <td style={{ padding: '10px 12px 10px 0', color: '#6b7280' }}>{posting.location}</td>
+                            <td style={{ padding: '10px 12px 10px 0', color: '#6b7280', textTransform: 'capitalize' }}>{posting.source}</td>
                             <td style={{ padding: '10px 12px 10px 0', color: '#6b7280', whiteSpace: 'nowrap' }}>
                                 {formatPostedAt(posting.posted_at, posting.fetched_at)}
                             </td>
