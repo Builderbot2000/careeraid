@@ -136,24 +136,6 @@ export async function scorePostings(
 ): Promise<void> {
   if (candidates.length === 0) return
 
-  const config = db
-    .prepare('SELECT affinity_skip_threshold FROM search_config WHERE id = 1')
-    .get() as { affinity_skip_threshold: number } | undefined
-
-  const skipThreshold = config?.affinity_skip_threshold ?? 15
-
-  if (candidates.length < skipThreshold) {
-    const updateSkip = db.prepare(
-      `UPDATE job_postings
-       SET affinity_skipped = 1, affinity_score = NULL, affinity_scored_at = NULL
-       WHERE id = ?`,
-    )
-    db.transaction(() => {
-      for (const p of candidates) updateSkip.run(p.id)
-    })()
-    return
-  }
-
   const intent =
     (db.prepare('SELECT intent FROM search_config WHERE id = 1').get() as { intent: string | null })
       ?.intent ?? ''

@@ -535,7 +535,6 @@ function registerIpcHandlers(): void {
         intent: null,
         term_generation_hash: null,
         ranking_weights: '{}',
-        affinity_skip_threshold: 15,
         excluded_stack: '[]',
         required_keywords: '[]',
         excluded_keywords: '[]',
@@ -548,7 +547,6 @@ function registerIpcHandlers(): void {
     const allowed = new Set([
       'intent',
       'ranking_weights',
-      'affinity_skip_threshold',
       'excluded_stack',
       'required_keywords',
       'excluded_keywords',

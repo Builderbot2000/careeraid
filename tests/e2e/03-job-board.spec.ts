@@ -79,17 +79,6 @@ test.describe('Job Board & Ranking Module', () => {
     expect(count).toBeGreaterThan(1)
   })
 
-  test('"not scored (small batch)" badge shown when skip threshold exceeds posting count', async ({ page }) => {
-    // Set affinity skip threshold higher than 15 (the mock count) so all are skipped
-    await goTo(page, 'Settings')
-    const thresholdInput = page.getByLabel(/Affinity skip threshold|Skip threshold/i)
-    await thresholdInput.fill('20')
-    await page.getByRole('button', { name: /Save|Apply/i }).first().click()
-
-    await goTo(page, 'Jobs')
-    await expect(page.getByText(/not scored.*small batch|small batch/i).first()).toBeVisible({ timeout: 10_000 })
-  })
-
   test('clicking Tailor Resume navigates to the Resume view for that posting', async ({ page }) => {
     const tailorBtn = page.getByRole('button', { name: /Tailor Resume/i }).first()
     await tailorBtn.click()

@@ -7,15 +7,12 @@ export function FiltersTab(): React.ReactElement {
     const [excludedStack, setExcludedStack] = useState('')
     const [requiredKeywords, setRequiredKeywords] = useState('')
     const [excludedKeywords, setExcludedKeywords] = useState('')
-    const [threshold, setThreshold] = useState('')
-
     useEffect(() => {
         window.api.getSearchConfig().then((cfg) => {
             setConfig(cfg)
             setExcludedStack(arrayToField(cfg.excluded_stack))
             setRequiredKeywords(arrayToField(cfg.required_keywords))
             setExcludedKeywords(arrayToField(cfg.excluded_keywords))
-            setThreshold(String(cfg.affinity_skip_threshold ?? 15))
         })
     }, [])
 
@@ -63,20 +60,11 @@ export function FiltersTab(): React.ReactElement {
         save({ excluded_stack: fieldToArray(text) }).catch(console.error)
     }
 
-    function handleThresholdBlur(text: string): void {
-        const n = parseInt(text, 10)
-        if (!isNaN(n) && n >= 0) {
-            save({ affinity_skip_threshold: n }).catch(console.error)
-        }
-    }
-
     async function handleSaveAll(): Promise<void> {
-        const n = parseInt(threshold, 10)
         await save({
             required_keywords: fieldToArray(requiredKeywords),
             excluded_keywords: fieldToArray(excludedKeywords),
             excluded_stack: fieldToArray(excludedStack),
-            ...((!isNaN(n) && n >= 0) ? { affinity_skip_threshold: n } : {}),
         })
     }
 
@@ -168,30 +156,6 @@ export function FiltersTab(): React.ReactElement {
                     onBlur={(e) => handleStackBlur(e.target.value)}
                     style={textareaStyle}
                     placeholder="e.g. PHP&#10;Ruby on Rails"
-                />
-            </div>
-
-            <div style={{ marginBottom: '24px' }}>
-                <label htmlFor="filters-threshold" style={labelStyle}>Affinity Scoring Skip Threshold</label>
-                <p style={hintStyle}>
-                    When fewer than this many postings need scoring, skip LLM scoring and mark them as
-                    skipped. 0 = always score.
-                </p>
-                <input
-                    id="filters-threshold"
-                    type="number"
-                    min={0}
-                    value={threshold}
-                    onChange={(e) => setThreshold(e.target.value)}
-                    onBlur={(e) => handleThresholdBlur(e.target.value)}
-                    style={{
-                        width: '80px',
-                        padding: '6px 8px',
-                        fontSize: '0.875rem',
-                        border: '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        fontFamily: 'inherit',
-                    }}
                 />
             </div>
 

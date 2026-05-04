@@ -137,7 +137,7 @@ function loadConfig(db: Database.Database): {
   const configRow = db
     .prepare(
       `SELECT required_keywords, excluded_keywords, keyword_match_fields,
-              excluded_stack, ranking_weights, affinity_skip_threshold
+              excluded_stack, ranking_weights
        FROM search_config WHERE id = 1`,
     )
     .get() as
@@ -147,7 +147,6 @@ function loadConfig(db: Database.Database): {
         keyword_match_fields: string
         excluded_stack: string
         ranking_weights: string
-        affinity_skip_threshold: number
       }
     | undefined
 
@@ -201,7 +200,7 @@ export async function getRankedPostings(
   const { config, weights, userYoe } = loadConfig(db)
   const filtered = applyHardFilters(rows.map(rowToPosting), config, userYoe)
 
-  const needsScoring = filtered.filter((p) => p.affinity_score === null && !p.affinity_skipped)
+  const needsScoring = filtered.filter((p) => p.affinity_score === null)
   if (needsScoring.length > 0) {
     await scorePostings(db, apiKey, needsScoring)
     const rescoredIds = [...new Set(needsScoring.map((p) => p.id))]

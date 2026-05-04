@@ -125,7 +125,6 @@ export interface SearchConfigRow {
   intent: string | null
   term_generation_hash: string | null
   ranking_weights: string        // JSON: Record<string, number>
-  affinity_skip_threshold: number
   excluded_stack: string         // JSON: string[]
   required_keywords: string      // JSON: string[]
   excluded_keywords: string      // JSON: string[]

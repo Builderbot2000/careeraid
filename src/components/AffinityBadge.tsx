@@ -27,26 +27,13 @@ const baseStyle: React.CSSProperties = {
 
 export function AffinityBadge({
   score,
-  skipped,
   hardReqsClass,
   niceToHavesClass,
 }: {
   score: number | null
-  skipped: boolean
   hardReqsClass: HardReqsClass | null
   niceToHavesClass: NiceToHavesClass | null
 }): React.ReactElement {
-  if (skipped) {
-    return (
-      <span
-        style={{ ...baseStyle, background: '#f3f4f6', color: '#9ca3af', fontWeight: 400 }}
-        title="Affinity scoring skipped (below threshold)"
-      >
-        small batch
-      </span>
-    )
-  }
-
   if (!hardReqsClass) {
     return (
       <span
