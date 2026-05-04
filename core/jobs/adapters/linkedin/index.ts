@@ -364,14 +364,14 @@ export class LinkedInAdapter extends BaseAdapter {
           let applicant_count: number | null = null
 
           try {
-            await detailPage.goto(jobUrl, { waitUntil: 'commit', timeout: 30_000 })
-            await detailPage.waitForTimeout(1000)
+            await detailPage.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
             process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] detail page loaded\n`)
+            await detailPage.waitForTimeout(600)
             await detailPage.keyboard.press('Escape')
             await detailPage.waitForTimeout(300)
             const showMoreBtn = await detailPage.$(SELECTORS.detailShowMore)
             if (showMoreBtn) {
-              await showMoreBtn.click({ force: true }).catch(() => {})
+              await showMoreBtn.click().catch(() => {})
               await detailPage.waitForTimeout(300)
             }
             const detail = await parseDetail(detailPage)
