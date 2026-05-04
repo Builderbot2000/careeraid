@@ -1,4 +1,4 @@
-import { chromium, type Browser, type ElementHandle, type Page } from 'playwright'
+import { chromium, type Browser, type BrowserContext, type ElementHandle, type Page } from 'playwright'
 import { BaseAdapter, type JobPosting, type SearchFilters, type Seniority, type CrawlSignal } from '../base'
 
 const SOURCE = 'linkedin'
@@ -267,7 +267,10 @@ export class LinkedInAdapter extends BaseAdapter {
     onCaptchaRequired?: () => Promise<void>,
     signal?: CrawlSignal,
   ): Promise<void> {
-    const browser = await chromium.launch({ headless: false })
+    const browser = await chromium.launch({
+      headless: false,
+      args: ['--disable-blink-features=AutomationControlled'],
+    })
     try {
       await this._scrape(browser, term, filters, onPosting, onCaptchaRequired, signal)
     } finally {
@@ -283,8 +286,15 @@ export class LinkedInAdapter extends BaseAdapter {
     onCaptchaRequired?: () => Promise<void>,
     signal?: CrawlSignal,
   ): Promise<void> {
-    const searchPage = await browser.newPage()
-    const detailPage = await browser.newPage()
+    const context: BrowserContext = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    })
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false })
+    })
+    const searchPage = await context.newPage()
+    const detailPage = await context.newPage()
     let consecutiveFails = 0
     let reportedCount = 0
     const now = new Date().toISOString()
@@ -298,7 +308,9 @@ export class LinkedInAdapter extends BaseAdapter {
         signal?.checkAborted()
 
         const url = buildSearchUrl(term, filters, pageNum * PAGE_SIZE)
+        const tPage = Date.now()
         await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+        process.stdout.write(`[linkedin] page ${pageNum} loaded in ${Date.now()-tPage}ms\n`)
 
         // Pause for user to solve captcha/security challenge if detected.
         if (await isChallengeOrCaptcha(searchPage)) {
@@ -324,6 +336,7 @@ export class LinkedInAdapter extends BaseAdapter {
         }
 
         const cards = await searchPage.$$(SELECTORS.resultItem)
+        process.stdout.write(`[linkedin] page ${pageNum} got ${cards.length} cards\n`)
         if (cards.length === 0) break
 
         for (const card of cards) {
@@ -334,6 +347,7 @@ export class LinkedInAdapter extends BaseAdapter {
 
           // ── Card-level fields ──────────────────────────────────────────────
 
+          const tJob = Date.now()
           const parsed = await parseCard(card)
           if (!parsed) {
             consecutiveFails++
@@ -346,23 +360,19 @@ export class LinkedInAdapter extends BaseAdapter {
           // ── Detail page: raw_text + applicant_count ────────────────────────
 
           await delay(this.delayMs)
+          process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] delay done — fetching ${jobUrl}\n`)
 
           let raw_text: string | null = null
           let applicant_count: number | null = null
 
           try {
             await detailPage.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-            // LinkedIn shows a dismissable auth wall modal when the browser has
-            // session context (which it does — searchPage already loaded a LinkedIn
-            // page in this same context). Press Escape first, then try the close
-            // button as a fallback, so the description underneath becomes accessible.
-            await detailPage.keyboard.press('Escape').catch(() => {})
+            process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] detail page loaded\n`)
             const dismissBtn = await detailPage.$(SELECTORS.authWallDismiss).catch(() => null)
             if (dismissBtn) {
               await dismissBtn.click().catch(() => {})
-              await detailPage.waitForTimeout(400)
+              await detailPage.waitForTimeout(300)
             }
-            await detailPage.waitForSelector(SELECTORS.detailDescription, { timeout: 8_000 })
             const showMoreBtn = await detailPage.$(SELECTORS.detailShowMore)
             if (showMoreBtn) {
               await showMoreBtn.click().catch(() => {})
@@ -371,9 +381,9 @@ export class LinkedInAdapter extends BaseAdapter {
             const detail = await parseDetail(detailPage)
             raw_text = detail.raw_text
             applicant_count = detail.applicant_count
+            process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] detail parsed, raw_text ${raw_text ? `${raw_text.length} chars` : 'null'}\n`)
           } catch {
-            // Detail fetch failed — continue with card-level data only, not a
-            // hard parse failure.
+            process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] detail fetch failed, using card data\n`)
           }
 
           // ── Derived fields ─────────────────────────────────────────────────
@@ -423,6 +433,7 @@ export class LinkedInAdapter extends BaseAdapter {
     } finally {
       await searchPage.close()
       await detailPage.close()
+      await context.close()
     }
   }
 }

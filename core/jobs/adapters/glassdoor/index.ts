@@ -505,7 +505,6 @@ export class GlassdoorAdapter extends BaseAdapter {
 
       const url = buildSearchUrl(term, filters, pageNum)
       await searchPage.goto(url, { waitUntil: 'load', timeout: 30_000 })
-      console.log(`[glassdoor] page ${pageNum} landed on: ${searchPage.url()}`)
 
       // Cloudflare challenge — pause and wait for user to solve, then retry
       if (await isCloudflareChallenge(searchPage)) {
@@ -543,11 +542,6 @@ export class GlassdoorAdapter extends BaseAdapter {
       }
 
       const rawCards = await extractCards(searchPage)
-      console.log(`[glassdoor] page ${pageNum} extracted ${rawCards.length} cards`)
-      if (rawCards.length > 0) {
-        const s = rawCards[0]
-        console.log(`[glassdoor] sample card[0] href=${s.href} title=${s.title} company=${s.company}`)
-      }
       if (rawCards.length === 0) break
 
       for (const raw of rawCards) {
@@ -580,19 +574,16 @@ export class GlassdoorAdapter extends BaseAdapter {
         // The search page stays untouched — no click interception, no back-navigation.
         let raw_text: string | null = null
         try {
-          const t0 = Date.now()
           await detailPage.goto(rawAbsoluteHref, {
             waitUntil: 'domcontentloaded',
             timeout: 8_000,
             referer: searchPage.url(),
           })
-          console.log(`[glassdoor] [+${Date.now()-t0}ms] detail page loaded`)
 
           await detailPage.waitForSelector(
             `${SELECTORS.jobDescriptionContent}, ${SELECTORS.jobDescriptionPage}`,
             { timeout: 3_000 },
           )
-          console.log(`[glassdoor] [+${Date.now()-t0}ms] description appeared`)
 
           const showMoreBtn = await detailPage.$(SELECTORS.showMore)
           if (showMoreBtn) {
@@ -617,7 +608,6 @@ export class GlassdoorAdapter extends BaseAdapter {
           }
 
           const detail = await parseDetail(detailPage)
-          console.log(`[glassdoor] [+${Date.now()-t0}ms] detail parsed, raw_text ${detail.raw_text ? `${detail.raw_text.length} chars` : 'null'}${detail.jobUnavailable ? ' (unavailable)' : ''}`)
 
           if (detail.jobUnavailable) {
             console.warn(`[glassdoor] job no longer available, skipping: ${jobUrl}`)

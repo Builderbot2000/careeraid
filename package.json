@@ -6,7 +6,7 @@
   "main": "out/main/index.js",
   "typstVersion": "0.14.2",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/build-adapters.mjs && electron-vite dev",
     "build": "electron-vite build && node scripts/build-adapters.mjs",
     "build:adapters": "node scripts/build-adapters.mjs",
     "preview": "electron-vite preview",

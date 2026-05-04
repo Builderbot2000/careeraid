@@ -55,7 +55,10 @@ import type { PostingStatus } from '../core/tracker/models'
 const isDev = process.env.NODE_ENV === 'development'
 
 // Must be set before loadAdapters() triggers require('playwright') inside adapter CJS files
-process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(app.getPath('userData'), 'ms-playwright')
+// In dev, keep the default system Playwright cache so the local browser is found.
+if (app.isPackaged) {
+  process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(app.getPath('userData'), 'ms-playwright')
+}
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
