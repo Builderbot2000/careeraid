@@ -33,6 +33,12 @@ function computeAffinityScore(hardClass: string, niceClass: string): number {
 
 const AffinityResultSchema = z.object({
   posting_id: z.string(),
+  yoe_min: z.number().nullable(),
+  yoe_max: z.number().nullable(),
+  seniority: z.enum(['intern', 'junior', 'mid', 'senior', 'staff', 'any']),
+  tech_stack: z.array(z.string()),
+  salary_min: z.number().nullable(),
+  salary_max: z.number().nullable(),
   hard_reqs_class: z.enum([
     'overqualified',
     'fully_qualified',
@@ -71,13 +77,20 @@ description:
 ${jobDescription.slice(0, 3000)}
 
 ## Task
-1. Extract the job's HARD REQUIREMENTS (must-haves: mandatory qualifications, skills, YOE).
-2. Extract NICE-TO-HAVES (preferred but not required).
-3. Evaluate the candidate against each group.
-4. Return ONLY a valid JSON object — no markdown, no commentary:
+1. Parse the job posting to extract structured fields.
+2. Extract the job's HARD REQUIREMENTS (must-haves: mandatory qualifications, skills, YOE).
+3. Extract NICE-TO-HAVES (preferred but not required).
+4. Evaluate the candidate against each group.
+5. Return ONLY a valid JSON object — no markdown, no commentary:
 
 {
   "posting_id": "${postingId}",
+  "yoe_min": <minimum years of experience required as integer, or null if not stated>,
+  "yoe_max": <maximum years of experience as integer, or null if not stated>,
+  "seniority": "<intern|junior|mid|senior|staff|any — inferred from the posting, not the candidate>",
+  "tech_stack": [<lowercase array of technologies explicitly required or mentioned in the posting>],
+  "salary_min": <minimum annual salary in USD as integer, or null if not stated>,
+  "salary_max": <maximum annual salary in USD as integer, or null if not stated>,
   "hard_reqs_class": "<overqualified|fully_qualified|minimally_qualified|underqualified>",
   "nice_to_haves_class": "<fully_met|partially_met|not_met>",
   "reasoning": "<one sentence: key fit or gap>"
@@ -153,7 +166,13 @@ export async function scorePostings(
          affinity_skipped    = 0,
          affinity_reasoning  = @reasoning,
          hard_reqs_class     = @hard_reqs_class,
-         nice_to_haves_class = @nice_to_haves_class
+         nice_to_haves_class = @nice_to_haves_class,
+         yoe_min             = @yoe_min,
+         yoe_max             = @yoe_max,
+         seniority           = @seniority,
+         tech_stack          = @tech_stack,
+         salary_min          = @salary_min,
+         salary_max          = @salary_max
      WHERE id = @id`,
   )
 
@@ -167,7 +186,7 @@ export async function scorePostings(
     try {
       const response = await client.messages.create({
         model: MODEL,
-        max_tokens: 256,
+        max_tokens: 512,
         messages: [
           {
             role: 'user',
@@ -205,6 +224,12 @@ export async function scorePostings(
         reasoning: null,
         hard_reqs_class: null,
         nice_to_haves_class: null,
+        yoe_min: posting.yoe_min ?? null,
+        yoe_max: posting.yoe_max ?? null,
+        seniority: posting.seniority,
+        tech_stack: JSON.stringify(posting.tech_stack),
+        salary_min: posting.salary_min ?? null,
+        salary_max: posting.salary_max ?? null,
       })
       return
     }
@@ -216,6 +241,12 @@ export async function scorePostings(
       reasoning: result.reasoning,
       hard_reqs_class: result.hard_reqs_class,
       nice_to_haves_class: result.nice_to_haves_class,
+      yoe_min: result.yoe_min,
+      yoe_max: result.yoe_max,
+      seniority: result.seniority,
+      tech_stack: JSON.stringify(result.tech_stack),
+      salary_min: result.salary_min,
+      salary_max: result.salary_max,
     })
   }
 
@@ -241,7 +272,13 @@ export async function scorePosting(
          affinity_skipped    = 0,
          affinity_reasoning  = @reasoning,
          hard_reqs_class     = @hard_reqs_class,
-         nice_to_haves_class = @nice_to_haves_class
+         nice_to_haves_class = @nice_to_haves_class,
+         yoe_min             = @yoe_min,
+         yoe_max             = @yoe_max,
+         seniority           = @seniority,
+         tech_stack          = @tech_stack,
+         salary_min          = @salary_min,
+         salary_max          = @salary_max
      WHERE id = @id`,
   )
 
@@ -249,7 +286,7 @@ export async function scorePosting(
   try {
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 256,
+      max_tokens: 512,
       messages: [
         {
           role: 'user',
@@ -279,9 +316,21 @@ export async function scorePosting(
       reasoning: result.reasoning,
       hard_reqs_class: result.hard_reqs_class,
       nice_to_haves_class: result.nice_to_haves_class,
+      yoe_min: result.yoe_min,
+      yoe_max: result.yoe_max,
+      seniority: result.seniority,
+      tech_stack: JSON.stringify(result.tech_stack),
+      salary_min: result.salary_min,
+      salary_max: result.salary_max,
     })
     return {
       ...posting,
+      yoe_min: result.yoe_min,
+      yoe_max: result.yoe_max,
+      seniority: result.seniority,
+      tech_stack: result.tech_stack,
+      salary_min: result.salary_min,
+      salary_max: result.salary_max,
       affinity_score: score,
       affinity_scored_at: now,
       affinity_skipped: false,
