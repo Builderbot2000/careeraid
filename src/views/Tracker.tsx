@@ -4,6 +4,39 @@ import { Pagination } from '../components/Pagination'
 
 const PAGE_SIZE = 20
 
+type SortKey = 'company' | 'applied' | 'title' | 'source' | 'last_seen' | 'status'
+type SortDir = 'asc' | 'desc'
+
+const STATUS_ORDER: PostingStatus[] = ['favorited', 'applied', 'interviewing', 'offer', 'rejected', 'ghosted']
+
+function getComparator(key: SortKey, dir: SortDir): (a: TrackerPosting, b: TrackerPosting) => number {
+    const sign = dir === 'asc' ? 1 : -1
+    return (a, b) => {
+        let av: number, bv: number
+        switch (key) {
+            case 'company':   return sign * a.company.localeCompare(b.company)
+            case 'title':     return sign * a.title.localeCompare(b.title)
+            case 'source':    return sign * a.source.localeCompare(b.source)
+            case 'status': {
+                av = STATUS_ORDER.indexOf(a.status as PostingStatus)
+                bv = STATUS_ORDER.indexOf(b.status as PostingStatus)
+                return sign * (av - bv)
+            }
+            case 'applied': {
+                if (!a.applied_at && !b.applied_at) return 0
+                if (!a.applied_at) return 1
+                if (!b.applied_at) return -1
+                return sign * (new Date(a.applied_at).getTime() - new Date(b.applied_at).getTime())
+            }
+            case 'last_seen': {
+                av = new Date(a.last_seen_at).getTime()
+                bv = new Date(b.last_seen_at).getTime()
+                return sign * (av - bv)
+            }
+        }
+    }
+}
+
 const TRACKER_STATUSES: PostingStatus[] = [
     'favorited',
     'applied',
@@ -34,6 +67,22 @@ export default function Tracker(): React.ReactElement {
     const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
     const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [sortKey, setSortKey] = useState<SortKey | null>(null)
+    const [sortDir, setSortDir] = useState<SortDir>('asc')
+
+    function handleSort(key: SortKey): void {
+        if (sortKey === key) {
+            if (sortDir === 'asc') { setSortDir('desc'); setPage(1) }
+            else { setSortKey(null); setSortDir('asc'); setPage(1) }
+        } else {
+            setSortKey(key); setSortDir('asc'); setPage(1)
+        }
+    }
+
+    function sortArrow(key: SortKey): React.ReactElement {
+        if (sortKey !== key) return <span style={{ color: '#d1d5db', fontSize: '0.75rem' }}>↕</span>
+        return <span style={{ fontSize: '0.75rem' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+    }
 
     useEffect(() => {
         window.api
@@ -90,8 +139,9 @@ export default function Tracker(): React.ReactElement {
         )
     }
 
-    const totalPages = Math.max(1, Math.ceil(postings.length / PAGE_SIZE))
-    const pagePostings = postings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    const sorted = sortKey ? [...postings].sort(getComparator(sortKey, sortDir)) : postings
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+    const pagePostings = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
     const allPageSelected = pagePostings.length > 0 && pagePostings.every((p) => selected.has(p.id))
     const somePageSelected = pagePostings.some((p) => selected.has(p.id))
 
@@ -135,12 +185,24 @@ export default function Tracker(): React.ReactElement {
                                 style={{ cursor: 'pointer' }}
                             />
                         </th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Company</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Applied</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Role</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Source</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Last Seen</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Status</th>
+                        {([
+                            ['company', 'Company'],
+                            ['applied', 'Applied'],
+                            ['title', 'Role'],
+                            ['source', 'Source'],
+                            ['last_seen', 'Last Seen'],
+                            ['status', 'Status'],
+                        ] as [SortKey, string][]).map(([key, label]) => (
+                            <th
+                                key={key}
+                                onClick={() => handleSort(key)}
+                                style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    {label} {sortArrow(key)}
+                                </span>
+                            </th>
+                        ))}
                         <th style={{ padding: '8px 0', fontWeight: 600, color: '#374151' }}>Link</th>
                     </tr>
                 </thead>

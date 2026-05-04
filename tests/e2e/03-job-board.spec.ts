@@ -1,4 +1,5 @@
 import { test, expect, goTo, runAndCommitScrape } from './fixtures/app'
+import type { Page } from '@playwright/test'
 
 test.describe('Job Board & Ranking Module', () => {
   test.beforeEach(async ({ page }) => {
@@ -151,5 +152,103 @@ test.describe('Job Board & Ranking Module', () => {
 
     await firstRow.getByRole('button', { name: /→|viewed/i }).click()
     await expect(statusSelect).toHaveValue('viewed')
+  })
+})
+
+// ─── Column header sorting ────────────────────────────────────────────────────
+// The mock adapter emits 15 deterministic postings in test mode (no shuffle).
+// With equal stub affinity scores the ranker orders by recency, so the default
+// order is Stripe (1d ago) … Airbnb (25d ago).
+
+async function columnValues(page: Page, tdIndex: number): Promise<string[]> {
+  const rows = page.locator('table tbody tr')
+  const count = await rows.count()
+  const values: string[] = []
+  for (let i = 0; i < count; i++) {
+    values.push(((await rows.nth(i).locator('td').nth(tdIndex).textContent()) ?? '').trim())
+  }
+  return values
+}
+
+test.describe('Job Board — column header sorting', () => {
+  test.beforeEach(async ({ page }) => {
+    await runAndCommitScrape(page)
+    await goTo(page, 'Jobs')
+  })
+
+  test('Company header sorts A→Z on first click and Z→A on second', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Company/ })
+
+    await header.click()
+    let companies = await columnValues(page, 1)
+    expect(companies[0]).toBe('Airbnb')
+    expect(companies).toEqual([...companies].sort((a, b) => a.localeCompare(b)))
+
+    await header.click()
+    companies = await columnValues(page, 1)
+    expect(companies[0]).toBe('Vercel')
+    expect(companies).toEqual([...companies].sort((a, b) => b.localeCompare(a)))
+  })
+
+  test('third click on Company header resets to default backend-ranked order', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Company/ })
+    await header.click()
+    await header.click()
+    await header.click()
+    // Default: composite-score order with equal affinity → most-recent posting first
+    const companies = await columnValues(page, 1)
+    expect(companies[0]).toBe('Stripe')
+  })
+
+  test('sort indicator cycles ↕ → ↑ → ↓ → ↕ on each click', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Company/ })
+    await expect(header).toContainText('↕')
+    await header.click()
+    await expect(header).toContainText('↑')
+    await header.click()
+    await expect(header).toContainText('↓')
+    await header.click()
+    await expect(header).toContainText('↕')
+  })
+
+  test('switching sort column clears the previous column indicator', async ({ page }) => {
+    const companyHeader = page.getByRole('columnheader', { name: /Company/ })
+    const roleHeader = page.getByRole('columnheader', { name: /^Role/ })
+
+    await companyHeader.click()
+    await expect(companyHeader).toContainText('↑')
+    await expect(roleHeader).toContainText('↕')
+
+    await roleHeader.click()
+    await expect(companyHeader).toContainText('↕')
+    await expect(roleHeader).toContainText('↑')
+  })
+
+  test('Posted header ascending puts oldest posting first', async ({ page }) => {
+    await page.getByRole('columnheader', { name: /Posted/ }).click()
+    // Airbnb was posted 25d ago — oldest among the first 15 mock postings
+    const companies = await columnValues(page, 1)
+    expect(companies[0]).toBe('Airbnb')
+  })
+
+  test('Posted header descending puts most-recent posting first', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Posted/ })
+    await header.click()
+    await header.click()
+    // Stripe was posted 1d ago — most recent
+    const companies = await columnValues(page, 1)
+    expect(companies[0]).toBe('Stripe')
+  })
+
+  test('Level header ascending groups mid before senior before staff', async ({ page }) => {
+    // td indices: checkbox(0) company(1) role(2) level(3)
+    await page.getByRole('columnheader', { name: /Level/ }).click()
+    const levels = await columnValues(page, 3)
+    // Among the first 15 mock postings: 4 mid, 9 senior, 2 staff — no intern/junior/any
+    const midLast = levels.lastIndexOf('mid')
+    const seniorFirst = levels.indexOf('senior')
+    const staffFirst = levels.indexOf('staff')
+    expect(midLast).toBeLessThan(seniorFirst)
+    expect(seniorFirst).toBeLessThan(staffFirst)
   })
 })

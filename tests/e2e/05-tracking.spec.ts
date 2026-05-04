@@ -138,3 +138,67 @@ test.describe('Application Tracking Module', () => {
     expect(afterText).not.toBe('-')
   })
 })
+
+// ─── Tracker column header sorting ───────────────────────────────────────────
+// Favorites the first 3 postings from the job board (Stripe, Vercel, Linear in
+// default recency-ranked order) so the tracker has enough rows to sort.
+
+test.describe('Tracker — column header sorting', () => {
+  test.beforeEach(async ({ page }) => {
+    await runAndCommitScrape(page)
+    await goTo(page, 'Jobs')
+    // Favorite rows 0–2 (Stripe, Vercel, Linear in default composite-score order)
+    const statusSelects = page.locator('table tbody tr select')
+    await statusSelects.nth(0).selectOption('favorited')
+    await statusSelects.nth(1).selectOption('favorited')
+    await statusSelects.nth(2).selectOption('favorited')
+    await goTo(page, 'Tracker')
+  })
+
+  test('Company header sorts tracker rows A→Z', async ({ page }) => {
+    await page.getByRole('columnheader', { name: /Company/ }).click()
+    // td indices: checkbox(0) company(1) applied(2) role(3) ...
+    const first = await page.locator('table tbody tr').first().locator('td').nth(1).textContent()
+    // Linear < Stripe < Vercel alphabetically
+    expect(first?.trim()).toBe('Linear')
+  })
+
+  test('Company header second click sorts Z→A', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Company/ })
+    await header.click()
+    await header.click()
+    const first = await page.locator('table tbody tr').first().locator('td').nth(1).textContent()
+    expect(first?.trim()).toBe('Vercel')
+  })
+
+  test('Status header sorts by workflow order: favorited → applied → interviewing', async ({ page }) => {
+    // Sort by Company first to get a deterministic initial row order
+    await page.getByRole('columnheader', { name: /Company/ }).click()
+    // Row order is now: Linear(0) Stripe(1) Vercel(2)
+    const selects = page.locator('table tbody tr select')
+    await selects.nth(1).selectOption('applied')      // Stripe → applied
+    await selects.nth(2).selectOption('interviewing') // Vercel → interviewing
+    // Linear stays favorited
+
+    await page.getByRole('columnheader', { name: /Status/ }).click()
+    // STATUS_ORDER: favorited < applied < interviewing
+    const rows = page.locator('table tbody tr')
+    const c0 = await rows.nth(0).locator('td').nth(1).textContent()
+    const c1 = await rows.nth(1).locator('td').nth(1).textContent()
+    const c2 = await rows.nth(2).locator('td').nth(1).textContent()
+    expect(c0?.trim()).toBe('Linear')      // favorited
+    expect(c1?.trim()).toBe('Stripe')      // applied
+    expect(c2?.trim()).toBe('Vercel')      // interviewing
+  })
+
+  test('sort indicator on tracker Company header cycles ↕ → ↑ → ↓ → ↕', async ({ page }) => {
+    const header = page.getByRole('columnheader', { name: /Company/ })
+    await expect(header).toContainText('↕')
+    await header.click()
+    await expect(header).toContainText('↑')
+    await header.click()
+    await expect(header).toContainText('↓')
+    await header.click()
+    await expect(header).toContainText('↕')
+  })
+})

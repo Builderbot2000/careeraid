@@ -6,6 +6,46 @@ import { Pagination } from '../components/Pagination'
 
 const PAGE_SIZE = 20
 
+type SortKey = 'company' | 'title' | 'seniority' | 'location' | 'source' | 'posted' | 'fit' | 'status'
+type SortDir = 'asc' | 'desc'
+
+const SENIORITY_ORDER = ['intern', 'junior', 'mid', 'senior', 'staff', 'any']
+const STATUS_ORDER = ['new', 'viewed', 'favorited', 'applied', 'interviewing', 'offer', 'rejected', 'ghosted']
+
+function getComparator(key: SortKey, dir: SortDir): (a: JobPosting, b: JobPosting) => number {
+    const sign = dir === 'asc' ? 1 : -1
+    return (a, b) => {
+        let av: number, bv: number
+        switch (key) {
+            case 'company':  return sign * a.company.localeCompare(b.company)
+            case 'title':    return sign * a.title.localeCompare(b.title)
+            case 'location': return sign * (a.location ?? '').localeCompare(b.location ?? '')
+            case 'source':   return sign * a.source.localeCompare(b.source)
+            case 'seniority': {
+                av = SENIORITY_ORDER.indexOf(a.seniority ?? 'any')
+                bv = SENIORITY_ORDER.indexOf(b.seniority ?? 'any')
+                return sign * (av - bv)
+            }
+            case 'status': {
+                av = STATUS_ORDER.indexOf(a.status)
+                bv = STATUS_ORDER.indexOf(b.status)
+                return sign * (av - bv)
+            }
+            case 'posted': {
+                av = new Date(a.posted_at ?? a.fetched_at).getTime()
+                bv = new Date(b.posted_at ?? b.fetched_at).getTime()
+                return sign * (av - bv)
+            }
+            case 'fit': {
+                if (a.affinity_score == null && b.affinity_score == null) return 0
+                if (a.affinity_score == null) return 1
+                if (b.affinity_score == null) return -1
+                return sign * (a.affinity_score - b.affinity_score)
+            }
+        }
+    }
+}
+
 const NEXT_STATUS: Partial<Record<JobPosting['status'], JobPosting['status']>> = {
     new: 'viewed',
     viewed: 'applied',
@@ -34,8 +74,24 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
     const [error, setError] = useState<string | null>(null)
     const [page, setPage] = useState(1)
     const [selected, setSelected] = useState<Set<string>>(new Set())
+    const [sortKey, setSortKey] = useState<SortKey | null>(null)
+    const [sortDir, setSortDir] = useState<SortDir>('asc')
     const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
     const tooltipTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    function handleSort(key: SortKey): void {
+        if (sortKey === key) {
+            if (sortDir === 'asc') { setSortDir('desc'); setPage(1) }
+            else { setSortKey(null); setSortDir('asc'); setPage(1) }
+        } else {
+            setSortKey(key); setSortDir('asc'); setPage(1)
+        }
+    }
+
+    function sortArrow(key: SortKey): React.ReactElement {
+        if (sortKey !== key) return <span style={{ color: '#d1d5db', fontSize: '0.75rem' }}>↕</span>
+        return <span style={{ fontSize: '0.75rem' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
+    }
 
     const loadPostings = useCallback(async () => {
         try {
@@ -119,8 +175,9 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
             </div>
         )
 
-    const totalPages = Math.max(1, Math.ceil(postings.length / PAGE_SIZE))
-    const pagePostings = postings.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+    const sorted = sortKey ? [...postings].sort(getComparator(sortKey, sortDir)) : postings
+    const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE))
+    const pagePostings = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
     const allPageSelected = pagePostings.length > 0 && pagePostings.every((p) => selected.has(p.id))
     const somePageSelected = pagePostings.some((p) => selected.has(p.id))
@@ -165,14 +222,26 @@ export default function JobBoard({ onNavigateToResume }: JobBoardProps): React.R
                                 style={{ cursor: 'pointer' }}
                             />
                         </th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Company</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Role</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Level</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Location</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Source</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Posted</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Fit</th>
-                        <th style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151' }}>Status</th>
+                        {([
+                            ['company', 'Company'],
+                            ['title', 'Role'],
+                            ['seniority', 'Level'],
+                            ['location', 'Location'],
+                            ['source', 'Source'],
+                            ['posted', 'Posted'],
+                            ['fit', 'Fit'],
+                            ['status', 'Status'],
+                        ] as [SortKey, string][]).map(([key, label]) => (
+                            <th
+                                key={key}
+                                onClick={() => handleSort(key)}
+                                style={{ padding: '8px 12px 8px 0', fontWeight: 600, color: '#374151', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                            >
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                    {label} {sortArrow(key)}
+                                </span>
+                            </th>
+                        ))}
                         <th style={{ padding: '8px 0', fontWeight: 600, color: '#374151' }}>Actions</th>
                     </tr>
                 </thead>
