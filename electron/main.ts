@@ -243,7 +243,7 @@ async function runStartupValidation(): Promise<{
   // Feature lock: Playwright Chromium
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { registry } = require('playwright-core/lib/server/registry') as {
+    const { registry } = require('playwright-core/lib/server/registry/index') as {
       registry: { findExecutable(n: string): { executablePath(): string | undefined } | undefined }
     }
     featureLocks.playwrightChromium = !registry.findExecutable('chromium')?.executablePath()
@@ -843,7 +843,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('playwright:install-chromium', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { registry } = require('playwright-core/lib/server/registry') as {
+    const { registry } = require('playwright-core/lib/server/registry/index') as {
       registry: {
         findExecutable(n: string): { executablePath(): string | undefined } | undefined
         install(execs: unknown[]): Promise<void>
