@@ -197,6 +197,7 @@ function delay(ms: number): Promise<void> {
 
 export class IndeedAdapter extends BaseAdapter {
   override readonly id = 'indeed'
+  override readonly requiresChromium = true
   override readonly delayMs = 3000
   override readonly availableSignals = new Set(['recency'])
   override readonly supportsLogin = true

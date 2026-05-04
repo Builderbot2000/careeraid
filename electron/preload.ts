@@ -183,6 +183,10 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('jobs:list-adapters')
   },
 
+  installChromium() {
+    return ipcRenderer.invoke('playwright:install-chromium')
+  },
+
   runScrape(adapterIds?: string[], loginAdapterIds?: string[]) {
     return ipcRenderer.invoke('jobs:run-scrape', adapterIds, loginAdapterIds)
   },

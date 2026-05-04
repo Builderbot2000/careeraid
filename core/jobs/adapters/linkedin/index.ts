@@ -256,6 +256,7 @@ async function isChallengeOrCaptcha(page: Page): Promise<boolean> {
 
 export class LinkedInAdapter extends BaseAdapter {
   override readonly id = 'linkedin'
+  override readonly requiresChromium = true
   override readonly delayMs = 3000
   override readonly availableSignals = new Set(['recency', 'applicant_count'])
 

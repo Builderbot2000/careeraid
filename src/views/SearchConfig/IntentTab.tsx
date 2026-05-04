@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import type {
+    FeatureLocks,
     SearchTerm,
     AdapterInfo,
     AdapterProgress,
@@ -16,6 +17,8 @@ import { AdapterStatusBadge } from '../../components/AdapterStatusBadge'
 import { LocationTagInput } from './LocationTagInput'
 
 export interface ScrapeProps {
+    featureLocks: FeatureLocks
+    onChromiumRequired: () => void
     scrapeState: ScrapeState
     adapterProgress: Record<string, AdapterProgress>
     errorMsg: string | null
@@ -30,6 +33,8 @@ export interface ScrapeProps {
 }
 
 export function IntentTab({
+    featureLocks,
+    onChromiumRequired,
     scrapeState,
     adapterProgress,
     errorMsg,
@@ -143,6 +148,11 @@ export function IntentTab({
     }
 
     function handleRunScrape(): void {
+        const needsChromium = adapters.some((a) => selectedAdapters.has(a.id) && a.requiresChromium)
+        if (needsChromium && featureLocks.playwrightChromium) {
+            onChromiumRequired()
+            return
+        }
         const adapterIds = Array.from(selectedAdapters)
         const loginIds = Array.from(loginAdapters).filter((id) => selectedAdapters.has(id))
         onRunScrape(adapterIds, loginIds)

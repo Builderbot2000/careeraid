@@ -145,6 +145,7 @@ export interface AdapterInfo {
   description: string
   available: boolean
   supportsLogin: boolean
+  requiresChromium: boolean
 }
 
 export interface AdapterProgress {
@@ -341,6 +342,7 @@ export interface ElectronAPI {
 
   // Jobs
   listAdapters(): Promise<AdapterInfo[]>
+  installChromium(): Promise<void>
   runScrape(adapterIds?: string[], loginAdapterIds?: string[]): Promise<ScrapeSummary>
   pauseScrape(): Promise<void>
   resumeScrape(): Promise<void>

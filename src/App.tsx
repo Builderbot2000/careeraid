@@ -7,6 +7,7 @@ import JobBoard from './views/JobBoard'
 import ResumePreview from './views/ResumePreview'
 import Tracker from './views/Tracker'
 import Analytics from './views/Analytics'
+import { ChromiumInstallModal } from './components/ChromiumInstallModal'
 
 export type ScrapeState = 'idle' | 'running' | 'paused' | 'error'
 
@@ -44,6 +45,7 @@ export default function App(): React.ReactElement {
     const [scrapeError, setScrapeError] = useState<string | null>(null)
     const [captchaQueue, setCaptchaQueue] = useState<CaptchaRequest[]>([])
     const [loginQueue, setLoginQueue] = useState<LoginRequest[]>([])
+    const [showChromiumModal, setShowChromiumModal] = useState(false)
 
     useEffect(() => {
         window.api.onFeatureLocks((locks) => setFeatureLocks(locks))
@@ -138,6 +140,8 @@ export default function App(): React.ReactElement {
                 {view === 'search' && (
                     <SearchConfig
                         key={searchNavKey}
+                        featureLocks={featureLocks}
+                        onChromiumRequired={() => setShowChromiumModal(true)}
                         scrapeState={scrapeState}
                         adapterProgress={adapterProgress}
                         errorMsg={scrapeError}
@@ -160,6 +164,9 @@ export default function App(): React.ReactElement {
                 {view === 'analytics' && <Analytics />}
                 {view === 'settings' && <Settings featureLocks={featureLocks} />}
             </main>
+            {showChromiumModal && (
+                <ChromiumInstallModal onClose={() => setShowChromiumModal(false)} />
+            )}
         </div>
     )
 }

@@ -428,6 +428,7 @@ function delay(ms: number): Promise<void> {
 
 export class GlassdoorAdapter extends BaseAdapter {
   override readonly id = 'glassdoor'
+  override readonly requiresChromium = true
   override readonly delayMs = 2500
   override readonly availableSignals = new Set(['recency', 'salary'])
   override readonly supportsLogin = true

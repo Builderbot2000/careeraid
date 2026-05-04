@@ -131,6 +131,7 @@ export abstract class BaseAdapter {
   readonly delayMs: number = 3000
   readonly availableSignals: Set<string> = new Set()
   readonly supportsLogin: boolean = false
+  readonly requiresChromium: boolean = false
 
   /**
    * Opens a browser to the site's login page and stores it for reuse across

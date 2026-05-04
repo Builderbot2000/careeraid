@@ -54,6 +54,9 @@ import type { PostingStatus } from '../core/tracker/models'
 
 const isDev = process.env.NODE_ENV === 'development'
 
+// Must be set before loadAdapters() triggers require('playwright') inside adapter CJS files
+process.env.PLAYWRIGHT_BROWSERS_PATH = path.join(app.getPath('userData'), 'ms-playwright')
+
 // ─── Window ───────────────────────────────────────────────────────────────────
 
 let mainWindow: BrowserWindow | null = null
@@ -238,8 +241,15 @@ async function runStartupValidation(): Promise<{
   }
 
   // Feature lock: Playwright Chromium
-  const playwrightDir = path.join(app.getPath('userData'), 'ms-playwright')
-  featureLocks.playwrightChromium = !fs.existsSync(playwrightDir)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { registry } = require('playwright-core/lib/server/registry') as {
+      registry: { findExecutable(n: string): { executablePath(): string | undefined } | undefined }
+    }
+    featureLocks.playwrightChromium = !registry.findExecutable('chromium')?.executablePath()
+  } catch {
+    featureLocks.playwrightChromium = true
+  }
 
   // Feature lock: profile empty (table may not exist until Phase 2)
   try {
@@ -827,8 +837,25 @@ function registerIpcHandlers(): void {
       description: ADAPTER_META[a.id]?.description ?? `Plugin adapter: ${a.id}`,
       available: true,
       supportsLogin: a.supportsLogin,
+      requiresChromium: a.requiresChromium,
     })),
   )
+
+  ipcMain.handle('playwright:install-chromium', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { registry } = require('playwright-core/lib/server/registry') as {
+      registry: {
+        findExecutable(n: string): { executablePath(): string | undefined } | undefined
+        install(execs: unknown[]): Promise<void>
+      }
+    }
+    const chromiumExec = registry.findExecutable('chromium')
+    if (!chromiumExec) throw new Error('Chromium not found in Playwright registry')
+    await registry.install([chromiumExec])
+    const newLockValue = !chromiumExec.executablePath()
+    currentFeatureLocks = { ...currentFeatureLocks, playwrightChromium: newLockValue }
+    mainWindow?.webContents.send('startup:feature-locks', currentFeatureLocks)
+  })
 
   ipcMain.handle('adapters:get-plugin-dir', () => getUserAdapterDir(app.getPath('userData')))
 
