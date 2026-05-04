@@ -8,10 +8,11 @@ import ResumePreview from './views/ResumePreview'
 import Tracker from './views/Tracker'
 import Analytics from './views/Analytics'
 import { ChromiumInstallModal } from './components/ChromiumInstallModal'
+import { ResumeLockedModal } from './components/ResumeLockedModal'
 
 export type ScrapeState = 'idle' | 'running' | 'paused' | 'error'
 
-type View = 'profile' | 'search' | 'jobs' | 'resume' | 'tracker' | 'analytics' | 'settings'
+export type View = 'profile' | 'search' | 'jobs' | 'resume' | 'tracker' | 'analytics' | 'settings'
 
 interface NavItem {
     id: View
@@ -21,7 +22,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
     { id: 'profile', label: 'Profile' },
-    { id: 'search', label: 'Search' },
+    { id: 'search', label: 'Search', lockedBy: ['playwrightChromium'] },
     { id: 'jobs', label: 'Jobs' },
     { id: 'resume', label: 'Resume', lockedBy: ['typst', 'claudeApiKey', 'profileEmpty'] },
     { id: 'tracker', label: 'Tracker' },
@@ -45,7 +46,7 @@ export default function App(): React.ReactElement {
     const [scrapeError, setScrapeError] = useState<string | null>(null)
     const [captchaQueue, setCaptchaQueue] = useState<CaptchaRequest[]>([])
     const [loginQueue, setLoginQueue] = useState<LoginRequest[]>([])
-    const [showChromiumModal, setShowChromiumModal] = useState(false)
+    const [lockedNav, setLockedNav] = useState<View | null>(null)
 
     useEffect(() => {
         window.api.onFeatureLocks((locks) => setFeatureLocks(locks))
@@ -105,7 +106,10 @@ export default function App(): React.ReactElement {
 
     function navigate(id: View, posting?: JobPosting): void {
         const item = NAV.find((n) => n.id === id)
-        if (item && isLocked(item)) return
+        if (item && isLocked(item)) {
+            setLockedNav(id)
+            return
+        }
         setPendingNavPosting(posting ?? null)
         if (id === 'search') setSearchNavKey((k) => k + 1)
         setView(id)
@@ -140,8 +144,6 @@ export default function App(): React.ReactElement {
                 {view === 'search' && (
                     <SearchConfig
                         key={searchNavKey}
-                        featureLocks={featureLocks}
-                        onChromiumRequired={() => setShowChromiumModal(true)}
                         scrapeState={scrapeState}
                         adapterProgress={adapterProgress}
                         errorMsg={scrapeError}
@@ -164,8 +166,18 @@ export default function App(): React.ReactElement {
                 {view === 'analytics' && <Analytics />}
                 {view === 'settings' && <Settings featureLocks={featureLocks} />}
             </main>
-            {showChromiumModal && (
-                <ChromiumInstallModal onClose={() => setShowChromiumModal(false)} />
+            {lockedNav === 'search' && (
+                <ChromiumInstallModal
+                    onClose={() => setLockedNav(null)}
+                    onInstalled={() => { setLockedNav(null); setView('search') }}
+                />
+            )}
+            {lockedNav === 'resume' && (
+                <ResumeLockedModal
+                    featureLocks={featureLocks}
+                    onClose={() => setLockedNav(null)}
+                    onNavigate={(v) => { setLockedNav(null); navigate(v) }}
+                />
             )}
         </div>
     )

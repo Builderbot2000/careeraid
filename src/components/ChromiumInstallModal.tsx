@@ -2,11 +2,12 @@ import React, { useState } from 'react'
 
 interface Props {
   onClose: () => void
+  onInstalled?: () => void
 }
 
 type State = 'idle' | 'downloading' | 'success' | 'error'
 
-export function ChromiumInstallModal({ onClose }: Props): React.ReactElement {
+export function ChromiumInstallModal({ onClose, onInstalled }: Props): React.ReactElement {
   const [state, setState] = useState<State>('idle')
   const [error, setError] = useState<string | null>(null)
 
@@ -15,6 +16,7 @@ export function ChromiumInstallModal({ onClose }: Props): React.ReactElement {
     setError(null)
     try {
       await window.api.installChromium()
+      onInstalled?.()
       setState('success')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -82,7 +84,7 @@ export function ChromiumInstallModal({ onClose }: Props): React.ReactElement {
         {state === 'success' && (
           <>
             <p style={{ fontSize: 13, color: 'var(--success)', marginBottom: 16 }}>
-              Chromium installed — you can now run scrapes.
+              Chromium installed — you can now use Search.
             </p>
             <button
               onClick={onClose}
@@ -92,7 +94,7 @@ export function ChromiumInstallModal({ onClose }: Props): React.ReactElement {
                 borderRadius: 'var(--radius)', color: 'var(--text)',
               }}
             >
-              Close
+              Go to Search
             </button>
           </>
         )}
