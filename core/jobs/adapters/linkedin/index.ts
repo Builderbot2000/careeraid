@@ -28,8 +28,6 @@ export const SELECTORS = {
   detailDescriptionFallback: '.description__text--rich',
   detailApplicantCount: '.num-applicants__caption',
   detailShowMore: 'button.show-more-less-html__button--more',
-  // Auth wall overlay dismiss button (soft modal shown when session context exists)
-  authWallDismiss: 'button.modal__dismiss, .artdeco-modal__dismiss, button[aria-label="Dismiss"], button[data-tracking-control-name*="auth-wall"][data-tracking-control-name*="close"]',
 } as const
 
 // ─── Known tech keyword list ──────────────────────────────────────────────────
@@ -366,16 +364,14 @@ export class LinkedInAdapter extends BaseAdapter {
           let applicant_count: number | null = null
 
           try {
-            await detailPage.goto(jobUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+            await detailPage.goto(jobUrl, { waitUntil: 'commit', timeout: 30_000 })
+            await detailPage.waitForTimeout(1000)
             process.stdout.write(`[linkedin] [+${Date.now()-tJob}ms] detail page loaded\n`)
-            const dismissBtn = await detailPage.$(SELECTORS.authWallDismiss).catch(() => null)
-            if (dismissBtn) {
-              await dismissBtn.click().catch(() => {})
-              await detailPage.waitForTimeout(300)
-            }
+            await detailPage.keyboard.press('Escape')
+            await detailPage.waitForTimeout(300)
             const showMoreBtn = await detailPage.$(SELECTORS.detailShowMore)
             if (showMoreBtn) {
-              await showMoreBtn.click().catch(() => {})
+              await showMoreBtn.click({ force: true }).catch(() => {})
               await detailPage.waitForTimeout(300)
             }
             const detail = await parseDetail(detailPage)
