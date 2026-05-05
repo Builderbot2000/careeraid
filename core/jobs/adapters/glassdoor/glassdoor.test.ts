@@ -104,14 +104,29 @@ describe('buildSearchUrl', () => {
 // ─── cleanJobUrl ──────────────────────────────────────────────────────────────
 
 describe('cleanJobUrl', () => {
-  it('strips query params from a full Glassdoor job URL', () => {
+  it('strips tracking params but keeps jl from a full Glassdoor job URL', () => {
     const href = 'https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm?jl=1234&pos=1&ao=1'
+    expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm?jl=1234')
+  })
+
+  it('handles relative href and preserves jl', () => {
+    const href = '/job-listing/senior-engineer-JBCD1234.htm?jl=1234'
+    expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm?jl=1234')
+  })
+
+  it('normalises glassdoor.ca TLD to glassdoor.com and keeps jl', () => {
+    const href = 'https://www.glassdoor.ca/job-listing/accounting-manager-JV_IC3708260.htm?jl=1010012741864&src=GD_JOB_AD&ao=1'
+    expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/accounting-manager-JV_IC3708260.htm?jl=1010012741864')
+  })
+
+  it('works when jl param is absent', () => {
+    const href = 'https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm?pos=1&ao=1'
     expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm')
   })
 
-  it('handles relative href', () => {
-    const href = '/job-listing/senior-engineer-JBCD1234.htm?jl=1234'
-    expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/senior-engineer-JBCD1234.htm')
+  it('converts partner URL to canonical form with jl param', () => {
+    const href = '/partner/jobListing?jobListingId=5678&src=GD'
+    expect(cleanJobUrl(href)).toBe('https://www.glassdoor.com/job-listing/-JL5678.htm?jl=5678')
   })
 
   it('returns href unchanged for unparseable input', () => {

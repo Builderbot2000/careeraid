@@ -109,9 +109,12 @@ export function cleanJobUrl(href: string): string {
     // Partner tracking URLs carry jobListingId — convert to canonical form
     if (u.pathname.includes('/partner/jobListing')) {
       const jl = u.searchParams.get('jobListingId')
-      if (jl) return `https://www.glassdoor.com/job-listing/-JL${jl}.htm`
+      if (jl) return `https://www.glassdoor.com/job-listing/-JL${jl}.htm?jl=${jl}`
     }
-    return `https://www.glassdoor.com${u.pathname}`
+    // Glassdoor requires the jl= param to render the job page; strip all other tracking params
+    const jl = u.searchParams.get('jl')
+    const base2 = `https://www.glassdoor.com${u.pathname}`
+    return jl ? `${base2}?jl=${jl}` : base2
   } catch {
     return href
   }
