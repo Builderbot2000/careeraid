@@ -3,8 +3,8 @@ import { load } from 'cheerio'
 import { BaseAdapter, type JobPosting, type SearchFilters, type CrawlSignal } from '../base'
 import { extractYoe, extractSeniority, extractTechStack } from '../linkedin'
 
-const SOURCE = 'hackernews'
-const SCRAPER_VERSION = 'hackernews-adapter@1'
+const SOURCE = 'ycombinator'
+const SCRAPER_VERSION = 'ycombinator-adapter@2'
 
 const ALGOLIA_BASE = 'https://hn.algolia.com/api/v1/search_by_date'
 const HN_ITEM_BASE = 'https://news.ycombinator.com/item'
@@ -16,11 +16,10 @@ const MAX_PAGES = 3
 
 interface AlgoliaHit {
   objectID: string
-  title: string
-  url?: string
-  job_text?: string
-  created_at: string  // ISO 8601
-  created_at_i: number  // Unix timestamp
+  title: string        // "Company (YC F24) Is Hiring" — role is NOT here
+  url?: string         // external job posting URL
+  created_at: string   // ISO 8601
+  created_at_i: number // Unix timestamp
 }
 
 interface AlgoliaResponse {
@@ -46,11 +45,13 @@ export interface ParsedHNTitle {
 }
 
 /**
- * Extracts company name and job role from HN job post titles such as:
- *   "Company (YC W21) Is Hiring – Role (domain.com)"
- *   "Company Is Hiring: Role"
- *   "Company Is Hiring"
+ * Extracts company name from HN job post titles such as:
+ *   "Company (YC W21) Is Hiring"
+ *   "Company Is Hiring: Role"   (role embedded in Algolia title — rare)
  *   "Company – Hiring Role"
+ *
+ * Note: for ycombinator.com link posts the role is NOT in the Algolia title;
+ * use titleFromYCUrl() instead for those.
  */
 export function parseHNTitle(raw: string): ParsedHNTitle {
   // Strip trailing " (domain.com)" e.g. "(ashbyhq.com)", "(jiga.io)"
@@ -82,12 +83,49 @@ export function parseHNTitle(raw: string): ParsedHNTitle {
   return { company: company || stripped, title: role || stripped }
 }
 
+// YC job URLs: /companies/{slug}/jobs/{7-char-id}-{role-slug}
+const YC_JOB_RE = /ycombinator\.com\/companies\/[^/]+\/jobs\/[A-Za-z0-9]+-(.+)$/
+
+/**
+ * Extracts the job role from a ycombinator.com job URL.
+ * e.g. ".../jobs/rEWfZ6R-senior-forward-deployed-engineer" → "Senior Forward Deployed Engineer"
+ */
+export function titleFromYCUrl(url: string): string | null {
+  const m = url.match(YC_JOB_RE)
+  if (!m) return null
+  return m[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
+/**
+ * Fetches a job posting page and returns its plain-text body.
+ * Returns null on any fetch or parse error.
+ */
+async function fetchJobText(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; careeraid-bot/1.0)' },
+    })
+    if (!res.ok) return null
+    const html = await res.text()
+    const $ = load(html)
+    $('script, style, nav, header, footer').remove()
+    const text = ($('main').length ? $('main') : $('body'))
+      .text()
+      .replace(/\s{2,}/g, ' ')
+      .trim()
+    return text || null
+  } catch {
+    return null
+  }
+}
+
 // ─── Adapter ──────────────────────────────────────────────────────────────────
 
-export class HackerNewsAdapter extends BaseAdapter {
-  readonly id = 'hackernews'
-  readonly delayMs = 300
+export class YCombinatorAdapter extends BaseAdapter {
+  readonly id = 'ycombinator'
+  readonly delayMs = 500
   readonly availableSignals = new Set(['recency'])
+  readonly ignoresTerm = true
 
   async search(
     _term: string,
@@ -124,30 +162,38 @@ export class HackerNewsAdapter extends BaseAdapter {
 
       for (const hit of data.hits) {
         if (reportedCount >= maxResults) break
+        await signal?.waitForResume()
+        signal?.checkAborted()
 
-        const parsed = parseHNTitle(hit.title)
-        const url    = hit.url ?? `${HN_ITEM_BASE}?id=${hit.objectID}`
+        const url = hit.url ?? `${HN_ITEM_BASE}?id=${hit.objectID}`
 
-        // Strip HTML tags from job_text (self-post content)
-        let rawText: string | null = null
-        if (hit.job_text) {
-          const $ = load(hit.job_text)
-          const text = $('body').text().trim()
-          rawText = text || null
+        // Algolia title is "Company (YC F24) Is Hiring" — use it only for company.
+        // Role comes from the URL slug for YC URLs; fall back to the Algolia title.
+        const parsed  = parseHNTitle(hit.title)
+        const ycTitle = titleFromYCUrl(url)
+        const title   = ycTitle ?? parsed.title
+
+        // Fetch job page text for YC URLs; fall back to the HN title.
+        // raw_text must be non-null or the ranker query silently drops the row.
+        let rawText: string
+        if (hit.url) {
+          rawText = await fetchJobText(hit.url) ?? title
+        } else {
+          rawText = title
         }
 
-        const combinedText = `${parsed.title} ${rawText ?? ''}`
+        const combinedText = `${title} ${rawText}`
         const { yoe_min, yoe_max } = extractYoe(combinedText)
-        const seniority   = extractSeniority(parsed.title, rawText ?? '')
-        const tech_stack  = extractTechStack(combinedText)
-        const posted_at   = hit.created_at.slice(0, 10)
-        const now         = new Date().toISOString()
+        const seniority  = extractSeniority(title, rawText)
+        const tech_stack = extractTechStack(combinedText)
+        const posted_at  = hit.created_at.slice(0, 10)
+        const now        = new Date().toISOString()
 
         onPosting?.({
           source:              SOURCE,
           url,
           resolved_domain:     null,
-          title:               parsed.title,
+          title,
           company:             parsed.company,
           location:            '',
           yoe_min,
@@ -173,14 +219,13 @@ export class HackerNewsAdapter extends BaseAdapter {
           company_rating:      null,
         })
         reportedCount++
-      }
 
-      if (page < totalPages - 1 && reportedCount < maxResults) {
         await new Promise<void>(resolve => setTimeout(resolve, this.delayMs))
       }
+
       page++
     }
   }
 }
 
-export default HackerNewsAdapter
+export default YCombinatorAdapter

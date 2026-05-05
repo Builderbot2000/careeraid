@@ -132,6 +132,8 @@ export abstract class BaseAdapter {
   readonly availableSignals: Set<string> = new Set()
   readonly supportsLogin: boolean = false
   readonly requiresChromium: boolean = false
+  /** When true, the adapter ignores the search term and runs only once per scrape. */
+  readonly ignoresTerm: boolean = false
 
   /**
    * Opens a browser to the site's login page and stores it for reuse across

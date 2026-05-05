@@ -830,7 +830,7 @@ function registerIpcHandlers(): void {
     linkedin: { name: 'LinkedIn', description: 'Scrapes LinkedIn public job search (no login required)' },
     indeed: { name: 'Indeed', description: 'Scrapes Indeed public job search (no login required)' },
     glassdoor: { name: 'Glassdoor', description: 'Scrapes Glassdoor job search, including salary estimates (no login required)' },
-    hackernews: { name: 'Hacker News Jobs', description: 'YC startup job feed from news.ycombinator.com/jobs (no login required)' },
+    ycombinator: { name: 'YCombinator Jobs', description: 'YC startup job feed from news.ycombinator.com/jobs (no login required)' },
     hnhiring: { name: 'HN Hiring', description: 'Monthly "Who is Hiring?" posts formatted at hnhiring.com (no login required)' },
   }
 

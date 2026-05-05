@@ -6,7 +6,6 @@ import { extractYoe, extractSeniority, extractTechStack } from '../linkedin'
 const SOURCE = 'hnhiring'
 const SCRAPER_VERSION = 'hnhiring-adapter@1'
 const BASE_URL = 'https://hnhiring.com'
-const HN_USER_BASE = 'https://news.ycombinator.com/user?id='
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -97,8 +96,6 @@ export function parsePostings(html: string): Omit<JobPosting, 'id'>[] {
     const { company, title, location } = parseFirstLine(firstLine)
     if (!company) return
 
-    const url = `${HN_USER_BASE}${encodeURIComponent(username)}`
-
     // Try to extract resolved_domain from first non-HN external link in body.
     let resolved_domain: string | null = null
     bodyEl.find('a[href]').each((_j, a) => {
@@ -121,7 +118,7 @@ export function parsePostings(html: string): Omit<JobPosting, 'id'>[] {
 
     postings.push({
       source:              SOURCE,
-      url,
+      url:                 '',
       resolved_domain,
       title:               title || company,
       company,
@@ -159,9 +156,10 @@ export class HNHiringAdapter extends BaseAdapter {
   readonly id = 'hnhiring'
   readonly delayMs = 500
   readonly availableSignals = new Set(['recency'])
+  readonly ignoresTerm = true
 
   async search(
-    _term: string,
+    term: string,
     filters: SearchFilters,
     onPosting?: (posting: Omit<JobPosting, 'id'>) => void,
     _onCaptchaRequired?: () => Promise<void>,
@@ -179,6 +177,10 @@ export class HNHiringAdapter extends BaseAdapter {
     const html     = await response.text()
     const postings = parsePostings(html)
 
+    const techUrl = term
+      ? `${BASE_URL}/technologies/${encodeURIComponent(term.toLowerCase())}`
+      : `${BASE_URL}/${slug}`
+
     let reportedCount = 0
 
     for (const posting of postings) {
@@ -190,7 +192,7 @@ export class HNHiringAdapter extends BaseAdapter {
       await signal?.waitForResume()
       signal?.checkAborted()
 
-      onPosting?.(posting)
+      onPosting?.({ ...posting, url: techUrl })
       reportedCount++
     }
   }

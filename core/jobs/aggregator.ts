@@ -171,6 +171,12 @@ export async function runScrape(
   loginAdapterIds?: string[],
   onLoginRequired?: (adapterId: string) => Promise<void>,
 ): Promise<ScrapeSummary> {
+  // Purge invisible zombie postings (raw_text = NULL, never interacted with) so
+  // adapters can re-import them with complete data. This handles cases like a
+  // source adapter being replaced — e.g. hackernews → ycombinator — where both
+  // adapters produce the same URLs but only the new one fetches raw_text.
+  db.prepare(`DELETE FROM job_postings WHERE raw_text IS NULL AND status IN ('new', 'viewed')`).run()
+
   // Collect existing URLs and composite keys from DB for dedup
   const existingUrls = new Set<string>(
     (db.prepare('SELECT url FROM job_postings').all() as { url: string }[]).map((r) => r.url),
@@ -274,7 +280,8 @@ export async function runScrape(
         onProgress?.({ adapterId: adapter.id, status: 'running', fetched: 0 })
         let adapterFetched = 0
 
-        for (const run of expandedRuns) {
+        const runsForAdapter = adapter.ignoresTerm ? expandedRuns.slice(0, 1) : expandedRuns
+        for (const run of runsForAdapter) {
           const filters: SearchFilters = {}
           if (run.location) filters.location = run.location
           if (run.seniorities) filters.seniorities = run.seniorities
