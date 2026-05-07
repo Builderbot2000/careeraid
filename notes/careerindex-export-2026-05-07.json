@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "exported_at": "2026-05-07T04:27:03.403Z",
+  "profile_entries": [
+    {
+      "id": "1e5d4dc2-d0b4-43bd-90fb-7e54e631f950",
+      "type": "experience",
+      "title": "Software Developer at Cyberium Group",
+      "content": "Served as product team tech lead, collaborated with team members for work on three different company product streams. Optimized and scaled a blockchain-based Chrome extension from 1,000 to over 90,000 daily active users (DAUs). Headed the development of an employee training platform with integration of Unity and retrieval-augmented generative AI (RAG) components, establishing the platform as company's next flagship product. Oversaw operations of the company's flagship software product, ensuring service delivery to 50–90 corporate client users. Headed AI/ML research in company SRED initiatives, composed and presented research reports for key stakeholders. Technologies: Python, ML/AI, C#, SQL, MySQL, Javascript, Node.js, Typescript, HTML, SCSS, React, Redis, Angular, ASP.NET, Unity, Azure, Azure AI Foundry, GCP, Linux, FastAPI, Jest, Jmeter, CI/CD, GitHub Actions, Slack",
+      "tags": "[\"software developer\",\"tech lead\",\"python\",\"ml\",\"ai\",\"c#\",\"sql\",\"mysql\",\"javascript\",\"node.js\",\"typescript\",\"html\",\"scss\",\"react\",\"redis\",\"angular\",\"asp.net\",\"unity\",\"azure\",\"gcp\",\"linux\",\"fastapi\",\"jest\",\"jmeter\",\"ci/cd\",\"github actions\",\"blockchain\",\"rag\",\"product development\"]",
+      "start_date": "2025-04-01",
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "9cb4846c-71aa-4b65-ac7c-62f5ee56852e",
+      "type": "experience",
+      "title": "Software Developer (Volunteer, Remote) at Sikh Research Institute",
+      "content": "Configured and deployed an Omeka CMS to host and enable public access to over 10,000 archive records. Implemented data pipeline for processing up to 500 records at once, reducing manual data entry time by 75%. Technologies: ETL, Javascript, Typescript, HTML, CSS, Python, ORM, Next.js, Redux, Omeka, Git",
+      "tags": "[\"software developer\",\"volunteer\",\"remote\",\"etl\",\"javascript\",\"typescript\",\"html\",\"css\",\"python\",\"orm\",\"next.js\",\"redux\",\"omeka\",\"git\",\"cms\",\"data pipeline\"]",
+      "start_date": "2024-09-01",
+      "end_date": "2025-04-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "59c06854-186c-42c0-a9f5-73cb2d29660f",
+      "type": "experience",
+      "title": "Software Developer (Volunteer) at Simon Fraser University",
+      "content": "Developed a robust web portal and CMS for the SFU Iranian Club using Next.js and Strapi. Implemented internationalization (i18n) component to support multilingual content in web portal. Utilized AWS Amplify for frontend hosting, lowering operation expenses by 50% by configuring instances for scale to 0. Technologies: Javascript, Typescript, HTML, CSS, Next.js, AWS, Strapi, UI/UX, Product Design, Git",
+      "tags": "[\"software developer\",\"volunteer\",\"javascript\",\"typescript\",\"html\",\"css\",\"next.js\",\"aws\",\"strapi\",\"ui/ux\",\"product design\",\"git\",\"cms\",\"i18n\",\"internationalization\"]",
+      "start_date": "2023-07-01",
+      "end_date": "2024-08-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "6097b340-e102-48e2-a4b4-fc1537f5ce16",
+      "type": "experience",
+      "title": "Software Tester at Gatekeeper Systems",
+      "content": "Executed over 100 firmware test cases, detecting over 60 defects in firmware before release to production. Executed network performance tests on Gatekeeper's web services, identifying 3 critical network issues during operation. Served as Scrum Master, fostering a collaborative team environment that boosted morale and increased team productivity. Technologies: Firmware, Embedded Software, QA, Python, JIRA, Git",
+      "tags": "[\"software tester\",\"qa\",\"firmware\",\"embedded software\",\"python\",\"jira\",\"git\",\"scrum master\",\"testing\",\"network performance\"]",
+      "start_date": "2021-05-01",
+      "end_date": "2021-12-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "1f182bea-e60d-4fb9-9f66-ab29e8e7156f",
+      "type": "education",
+      "title": "M.S. Computer Science at Simon Fraser University",
+      "content": "Master of Science in Computer Science from Simon Fraser University, Burnaby, BC. Program duration: September 2024 – April 2026.",
+      "tags": "[\"master of science\",\"computer science\",\"simon fraser university\",\"graduate degree\"]",
+      "start_date": "2024-09-01",
+      "end_date": "2026-04-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "d13e39c3-ad9e-4e5f-a2a0-04003292b9c4",
+      "type": "education",
+      "title": "B.S. Computer Science at Simon Fraser University",
+      "content": "Bachelor of Science in Computer Science from Simon Fraser University, Burnaby, BC. Dean's Honour Roll (2022). SFU Mountain Madness 2023 (Hackathon): First Place. Program duration: September 2018 – April 2023.",
+      "tags": "[\"bachelor of science\",\"computer science\",\"simon fraser university\",\"undergraduate degree\",\"dean's honour roll\"]",
+      "start_date": "2018-09-01",
+      "end_date": "2023-04-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "660f76f8-ab09-4aad-9704-ab313586e761",
+      "type": "accomplishment",
+      "title": "Dean's Honour Roll at Simon Fraser University",
+      "content": "Received Dean's Honour Roll recognition in 2022 while pursuing Bachelor of Science in Computer Science at Simon Fraser University.",
+      "tags": "[\"dean's honour roll\",\"academic achievement\",\"simon fraser university\"]",
+      "start_date": "2022-01-01",
+      "end_date": "2022-01-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "a8b15e5b-a7d8-418f-ba74-6abf0c23e34e",
+      "type": "accomplishment",
+      "title": "First Place - SFU Mountain Madness 2023 Hackathon",
+      "content": "Achieved first place at SFU Mountain Madness 2023 Hackathon competition.",
+      "tags": "[\"hackathon\",\"first place\",\"mountain madness\",\"simon fraser university\",\"competition\"]",
+      "start_date": "2023-01-01",
+      "end_date": "2023-01-01",
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "0583347b-fc5c-4bc3-8b65-13734449ef58",
+      "type": "skill",
+      "title": "Programming Languages",
+      "content": "Proficient in Python, SQL, Java, JavaScript, C#, ASP.NET, TypeScript, HTML, CSS, SCSS, C, C++, Ruby, Go",
+      "tags": "[\"python\",\"sql\",\"java\",\"javascript\",\"c#\",\"asp.net\",\"typescript\",\"html\",\"css\",\"scss\",\"c\",\"c++\",\"ruby\",\"go\",\"programming languages\"]",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "5b5e616d-c646-456b-9126-79fb166398f9",
+      "type": "skill",
+      "title": "Front-end Technologies",
+      "content": "Experienced with React.js, Next.js, Angular, Tailwind CSS, Redux, Tkinter, Bootstrap, Axios, Vite",
+      "tags": "[\"react.js\",\"next.js\",\"angular\",\"tailwind css\",\"redux\",\"tkinter\",\"bootstrap\",\"axios\",\"vite\",\"front-end\",\"frontend\"]",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "f1c5f2ba-70c4-4b96-a9e7-15320f1ddf55",
+      "type": "skill",
+      "title": "Back-end Technologies",
+      "content": "Skilled in Node.js, Express.js, SocketIO, SpringBoot, PostgreSQL, MySQL, MongoDB, HTTP, REST API",
+      "tags": "[\"node.js\",\"express.js\",\"socketio\",\"springboot\",\"postgresql\",\"mysql\",\"mongodb\",\"http\",\"rest api\",\"back-end\",\"backend\"]",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "bcac2403-c851-4b83-837f-dc3c2a8d5756",
+      "type": "skill",
+      "title": "AI/ML Technologies",
+      "content": "Proficient in Pytorch, Scikit-Learn, LangChain, Pydantic AI, ETL, RAG, OpenAI, HuggingFace, R",
+      "tags": "[\"pytorch\",\"scikit-learn\",\"langchain\",\"pydantic ai\",\"etl\",\"rag\",\"openai\",\"huggingface\",\"r\",\"ai\",\"ml\",\"machine learning\",\"artificial intelligence\"]",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    },
+    {
+      "id": "96aaff5e-f99d-4739-983c-b8737d9b479e",
+      "type": "skill",
+      "title": "Miscellaneous Technologies and Tools",
+      "content": "Experienced with Git, GCP, AWS, Azure, CI/CD, UI/UX, Docker, Gitlab, GitHub, Agile, Scrum",
+      "tags": "[\"git\",\"gcp\",\"aws\",\"azure\",\"ci/cd\",\"ui/ux\",\"docker\",\"gitlab\",\"github\",\"agile\",\"scrum\",\"devops\",\"cloud\"]",
+      "start_date": null,
+      "end_date": null,
+      "created_at": "2026-05-06T20:55:18.487Z"
+    }
+  ],
+  "search_config": {
+    "id": 1,
+    "intent": "software developer or software engineer or programmer",
+    "term_generation_hash": null,
+    "ranking_weights": "{}",
+    "affinity_skip_threshold": 15,
+    "excluded_stack": "[]",
+    "required_keywords": "[]",
+    "excluded_keywords": "[]",
+    "keyword_match_fields": "[\"title\",\"tech_stack\"]"
+  },
+  "search_terms": [
+    {
+      "id": "80be1721-b22c-4db7-8e62-916873734587",
+      "term": "Software Developer",
+      "enabled": 1,
+      "source": "llm_generated",
+      "created_at": "2026-05-07T02:13:16.882Z",
+      "recency": "day",
+      "max_results": null,
+      "locations": "[\"Canada\"]",
+      "seniorities": "[\"intern\",\"junior\"]",
+      "work_type": "[\"remote\",\"hybrid\",\"onsite\"]"
+    },
+    {
+      "id": "343dfa34-7f89-405a-92c4-eaf2e5c2cbfc",
+      "term": "Software Engineer",
+      "enabled": 1,
+      "source": "llm_generated",
+      "created_at": "2026-05-07T02:13:16.882Z",
+      "recency": "day",
+      "max_results": null,
+      "locations": "[\"Canada\"]",
+      "seniorities": "[\"intern\",\"junior\"]",
+      "work_type": "[\"remote\",\"hybrid\",\"onsite\"]"
+    },
+    {
+      "id": "f69a339f-dd66-4fef-b553-5b2c2586bfd6",
+      "term": "Backend Developer",
+      "enabled": 1,
+      "source": "llm_generated",
+      "created_at": "2026-05-07T02:13:16.882Z",
+      "recency": "day",
+      "max_results": null,
+      "locations": "[\"Canada\"]",
+      "seniorities": "[\"intern\",\"junior\"]",
+      "work_type": "[\"remote\",\"hybrid\",\"onsite\"]"
+    },
+    {
+      "id": "2fe2058a-323c-4990-b4a3-0d092083fb60",
+      "term": "Full Stack Engineer",
+      "enabled": 1,
+      "source": "llm_generated",
+      "created_at": "2026-05-07T02:13:16.882Z",
+      "recency": "day",
+      "max_results": null,
+      "locations": "[\"Canada\"]",
+      "seniorities": "[\"intern\",\"junior\"]",
+      "work_type": "[\"remote\",\"hybrid\",\"onsite\"]"
+    },
+    {
+      "id": "9bdb6ce4-586a-48df-a416-f7eec7bd67b7",
+      "term": "Application Developer",
+      "enabled": 1,
+      "source": "llm_generated",
+      "created_at": "2026-05-07T02:13:16.882Z",
+      "recency": "day",
+      "max_results": null,
+      "locations": "[\"Canada\"]",
+      "seniorities": "[\"intern\",\"junior\"]",
+      "work_type": "[\"remote\",\"hybrid\",\"onsite\"]"
+    }
+  ],
+  "ban_list": []
+}

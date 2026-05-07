@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto'
 import type {
   ProfileEntry,
   UserProfile,
+  LanguageItem,
+  CitizenshipItem,
   CreateProfileEntryInput,
   UpdateProfileEntryInput,
   UserQualificationsInput,
@@ -106,10 +108,15 @@ export function deleteEntry(db: Database.Database, id: string): void {
 interface UserProfileRow {
   id: number
   yoe: number | null
-  yoe_industry: string | null
-  languages: string | null  // JSON array
-  citizenship: string | null
-  drivers_license: number   // SQLite 0/1
+  yoe_industry: string | null  // JSON string[]
+  languages: string | null     // JSON LanguageItem[]
+  citizenship: string | null   // JSON CitizenshipItem[]
+  drivers_license: number      // SQLite 0/1
+}
+
+function parseJsonArray<T>(raw: string | null): T[] {
+  if (!raw) return []
+  try { return JSON.parse(raw) as T[] } catch { return [] }
 }
 
 export function getUserProfile(db: Database.Database): UserProfile {
@@ -117,9 +124,9 @@ export function getUserProfile(db: Database.Database): UserProfile {
   return {
     id: row.id,
     yoe: row.yoe,
-    yoe_industry: row.yoe_industry,
-    languages: row.languages ? (JSON.parse(row.languages) as string[]) : [],
-    citizenship: row.citizenship,
+    yoe_industry: parseJsonArray<string>(row.yoe_industry),
+    languages: parseJsonArray<LanguageItem>(row.languages),
+    citizenship: parseJsonArray<CitizenshipItem>(row.citizenship),
     drivers_license: row.drivers_license === 1,
   }
 }
@@ -137,9 +144,9 @@ export function setUserQualifications(db: Database.Database, input: UserQualific
          drivers_license = ?
      WHERE id = 1`,
   ).run(
-    input.yoe_industry ?? null,
+    JSON.stringify(input.yoe_industry),
     JSON.stringify(input.languages),
-    input.citizenship ?? null,
+    JSON.stringify(input.citizenship),
     input.drivers_license ? 1 : 0,
   )
 }
@@ -176,9 +183,9 @@ export function exportToMarkdown(db: Database.Database): string {
   const lines: string[] = ['# Profile Export', '']
 
   if (profile.yoe !== null) lines.push(`yoe: ${profile.yoe}`)
-  if (profile.yoe_industry) lines.push(`yoe_industry: ${profile.yoe_industry}`)
-  if (profile.languages.length) lines.push(`languages: ${profile.languages.join(', ')}`)
-  if (profile.citizenship) lines.push(`citizenship: ${profile.citizenship}`)
+  if (profile.yoe_industry.length) lines.push(`yoe_industries: ${profile.yoe_industry.join(', ')}`)
+  if (profile.languages.length) lines.push(`languages: ${profile.languages.map((l) => `${l.name} (${l.proficiency})`).join(', ')}`)
+  if (profile.citizenship.length) lines.push(`citizenship: ${profile.citizenship.map((c) => `${c.country} — ${c.status}`).join('; ')}`)
   if (profile.drivers_license) lines.push(`drivers_license: true`)
   lines.push('')
 
@@ -217,23 +224,10 @@ export function importFromMarkdown(
   const yoeMatch = markdown.match(/^yoe:\s*(\d+)/m)
   if (yoeMatch) setUserYoe(db, parseInt(yoeMatch[1], 10))
 
-  const quals: Partial<UserQualificationsInput> = {}
-  const yoeIndustryMatch = markdown.match(/^yoe_industry:\s*(.+)/m)
-  if (yoeIndustryMatch) quals.yoe_industry = yoeIndustryMatch[1].trim()
-  const langsMatch = markdown.match(/^languages:\s*(.+)/m)
-  if (langsMatch) quals.languages = langsMatch[1].split(',').map((s) => s.trim()).filter(Boolean)
-  const citizenshipMatch = markdown.match(/^citizenship:\s*(.+)/m)
-  if (citizenshipMatch) quals.citizenship = citizenshipMatch[1].trim()
   const dlMatch = markdown.match(/^drivers_license:\s*(true|1)/mi)
-  if (dlMatch) quals.drivers_license = true
-
-  if (Object.keys(quals).length > 0) {
-    setUserQualifications(db, {
-      yoe_industry: quals.yoe_industry ?? null,
-      languages: quals.languages ?? [],
-      citizenship: quals.citizenship ?? null,
-      drivers_license: quals.drivers_license ?? false,
-    })
+  if (dlMatch) {
+    const current = getUserProfile(db)
+    setUserQualifications(db, { ...current, drivers_license: true })
   }
 
   // Split into sections on lines that are exactly '---'

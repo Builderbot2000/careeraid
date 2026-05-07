@@ -1,6 +1,9 @@
-import React from 'react'
-import type { ProfileEntry } from '../../shared/ipc-types'
-import { ENTRY_TYPES, TYPE_LABELS, TYPE_COLORS } from './constants'
+import React, { useState } from 'react'
+import type { ProfileEntry, LanguageItem, CitizenshipItem } from '../../shared/ipc-types'
+import {
+    ENTRY_TYPES, TYPE_LABELS, TYPE_COLORS,
+    INDUSTRIES, LANGUAGES, LANGUAGE_PROFICIENCIES, COUNTRIES, CITIZENSHIP_STATUSES,
+} from './constants'
 import type { FilterType } from './constants'
 
 interface EntryListProps {
@@ -8,17 +11,20 @@ interface EntryListProps {
     filter: FilterType
     statusMsg: string | null
     yoeInput: string
-    qualsIndustry: string
-    qualsLanguages: string
-    qualsCitizenship: string
+    qualsIndustries: string[]
+    qualsLanguages: LanguageItem[]
+    qualsCitizenship: CitizenshipItem[]
     qualsDriversLicense: boolean
     pdfImporting: boolean
     setFilter: (f: FilterType) => void
     setYoeInput: (v: string) => void
-    setQualsIndustry: (v: string) => void
-    setQualsLanguages: (v: string) => void
-    setQualsCitizenship: (v: string) => void
     setQualsDriversLicense: (v: boolean) => void
+    onAddIndustry: (industry: string) => void
+    onRemoveIndustry: (index: number) => void
+    onAddLanguage: (item: LanguageItem) => void
+    onRemoveLanguage: (index: number) => void
+    onAddCitizenship: (item: CitizenshipItem) => void
+    onRemoveCitizenship: (index: number) => void
     onSaveYoe: () => void
     onSaveQualifications: () => void
     onAdd: () => void
@@ -29,22 +35,175 @@ interface EntryListProps {
     onImportPdf: () => void
 }
 
+const sectionLabel: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    color: 'var(--text-dim, #6b7280)',
+    marginBottom: 8,
+    marginTop: 20,
+}
+
+const itemRow: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '6px 0',
+    borderBottom: '1px solid var(--border, #e5e7eb)',
+}
+
+const itemLabel: React.CSSProperties = {
+    flex: 1,
+    fontSize: 14,
+}
+
+const removeBtn: React.CSSProperties = {
+    fontSize: 12,
+    padding: '2px 8px',
+    background: 'none',
+    border: '1px solid var(--border, #e5e7eb)',
+    borderRadius: 4,
+    cursor: 'pointer',
+    color: 'var(--text-dim, #6b7280)',
+    flexShrink: 0,
+}
+
+function GeneralSection({
+    qualsIndustries,
+    qualsLanguages,
+    qualsCitizenship,
+    qualsDriversLicense,
+    setQualsDriversLicense,
+    onAddIndustry,
+    onRemoveIndustry,
+    onAddLanguage,
+    onRemoveLanguage,
+    onAddCitizenship,
+    onRemoveCitizenship,
+    onSaveQualifications,
+}: Pick<
+    EntryListProps,
+    'qualsIndustries' | 'qualsLanguages' | 'qualsCitizenship' | 'qualsDriversLicense' |
+    'setQualsDriversLicense' | 'onAddIndustry' | 'onRemoveIndustry' |
+    'onAddLanguage' | 'onRemoveLanguage' | 'onAddCitizenship' | 'onRemoveCitizenship' |
+    'onSaveQualifications'
+>): React.ReactElement {
+    const [industryToAdd, setIndustryToAdd] = useState(INDUSTRIES[0])
+    const [langToAdd, setLangToAdd] = useState(LANGUAGES[0])
+    const [langProfToAdd, setLangProfToAdd] = useState(LANGUAGE_PROFICIENCIES[0])
+    const [countryToAdd, setCountryToAdd] = useState(COUNTRIES[0])
+    const [statusToAdd, setStatusToAdd] = useState(CITIZENSHIP_STATUSES[0])
+
+    function addIndustry(): void {
+        onAddIndustry(industryToAdd)
+    }
+
+    function addLanguage(): void {
+        onAddLanguage({ name: langToAdd, proficiency: langProfToAdd })
+    }
+
+    function addCitizenship(): void {
+        onAddCitizenship({ country: countryToAdd, status: statusToAdd })
+    }
+
+    const addRowStyle: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }
+
+    return (
+        <div className="card">
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>General</div>
+            <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginBottom: 16 }}>
+                Authoritative facts fed directly to the job evaluator.
+            </div>
+
+            {/* Industries */}
+            <div style={sectionLabel}>Industries</div>
+            {qualsIndustries.map((ind, i) => (
+                <div key={i} style={itemRow}>
+                    <span style={itemLabel}>{ind}</span>
+                    <button style={removeBtn} onClick={() => onRemoveIndustry(i)}>Remove</button>
+                </div>
+            ))}
+            <div style={addRowStyle}>
+                <select value={industryToAdd} onChange={(e) => setIndustryToAdd(e.target.value)} style={{ flex: 1 }}>
+                    {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
+                </select>
+                <button className="btn btn-primary" onClick={addIndustry}>Add</button>
+            </div>
+
+            {/* Languages */}
+            <div style={sectionLabel}>Languages</div>
+            {qualsLanguages.map((lang, i) => (
+                <div key={i} style={itemRow}>
+                    <span style={itemLabel}>{lang.name} — {lang.proficiency}</span>
+                    <button style={removeBtn} onClick={() => onRemoveLanguage(i)}>Remove</button>
+                </div>
+            ))}
+            <div style={addRowStyle}>
+                <select value={langToAdd} onChange={(e) => setLangToAdd(e.target.value)} style={{ flex: 2 }}>
+                    {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+                <select value={langProfToAdd} onChange={(e) => setLangProfToAdd(e.target.value)} style={{ flex: 2 }}>
+                    {LANGUAGE_PROFICIENCIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <button className="btn btn-primary" onClick={addLanguage}>Add</button>
+            </div>
+
+            {/* Citizenship */}
+            <div style={sectionLabel}>Citizenship / Work Authorization</div>
+            {qualsCitizenship.map((c, i) => (
+                <div key={i} style={itemRow}>
+                    <span style={itemLabel}>{c.country} — {c.status}</span>
+                    <button style={removeBtn} onClick={() => onRemoveCitizenship(i)}>Remove</button>
+                </div>
+            ))}
+            <div style={addRowStyle}>
+                <select value={countryToAdd} onChange={(e) => setCountryToAdd(e.target.value)} style={{ flex: 2 }}>
+                    {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select value={statusToAdd} onChange={(e) => setStatusToAdd(e.target.value)} style={{ flex: 2 }}>
+                    {CITIZENSHIP_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button className="btn btn-primary" onClick={addCitizenship}>Add</button>
+            </div>
+
+            {/* Other */}
+            <div style={sectionLabel}>Other</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14 }}>
+                <input
+                    type="checkbox"
+                    checked={qualsDriversLicense}
+                    onChange={(e) => setQualsDriversLicense(e.target.checked)}
+                />
+                Has driver&apos;s licence
+            </label>
+
+            <div style={{ marginTop: 20 }}>
+                <button className="btn btn-primary" onClick={onSaveQualifications}>Save General</button>
+            </div>
+        </div>
+    )
+}
+
 export function EntryList({
     entries,
     filter,
     statusMsg,
     yoeInput,
-    qualsIndustry,
+    qualsIndustries,
     qualsLanguages,
     qualsCitizenship,
     qualsDriversLicense,
     pdfImporting,
     setFilter,
     setYoeInput,
-    setQualsIndustry,
-    setQualsLanguages,
-    setQualsCitizenship,
     setQualsDriversLicense,
+    onAddIndustry,
+    onRemoveIndustry,
+    onAddLanguage,
+    onRemoveLanguage,
+    onAddCitizenship,
+    onRemoveCitizenship,
     onSaveYoe,
     onSaveQualifications,
     onAdd,
@@ -54,7 +213,9 @@ export function EntryList({
     onImport,
     onImportPdf,
 }: EntryListProps): React.ReactElement {
-    const filtered = filter === 'all' ? entries : entries.filter((e) => e.type === filter)
+    const filtered = (filter === 'all' || filter === 'general')
+        ? entries
+        : entries.filter((e) => e.type === filter)
 
     return (
         <div>
@@ -105,170 +266,142 @@ export function EntryList({
                 )}
             </div>
 
-            {/* Fixed qualifications card */}
-            <div className="card">
-                <div style={{ fontWeight: 600, marginBottom: 12 }}>Fixed Qualifications</div>
-                <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginBottom: 12 }}>
-                    Authoritative facts fed directly to the job evaluator — overrides inferences from your experience text.
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', alignItems: 'end' }}>
-                    <div className="form-row" style={{ marginBottom: 0 }}>
-                        <label htmlFor="quals-industry">Industry (for YOE context)</label>
-                        <input
-                            id="quals-industry"
-                            type="text"
-                            value={qualsIndustry}
-                            placeholder="e.g. fintech, SaaS, healthcare"
-                            onChange={(e) => setQualsIndustry(e.target.value)}
-                        />
-                    </div>
-                    <div className="form-row" style={{ marginBottom: 0 }}>
-                        <label htmlFor="quals-languages">Spoken languages</label>
-                        <input
-                            id="quals-languages"
-                            type="text"
-                            value={qualsLanguages}
-                            placeholder="e.g. English, French"
-                            onChange={(e) => setQualsLanguages(e.target.value)}
-                        />
-                    </div>
-                    <div className="form-row" style={{ marginBottom: 0 }}>
-                        <label htmlFor="quals-citizenship">Citizenship / visa status</label>
-                        <input
-                            id="quals-citizenship"
-                            type="text"
-                            value={qualsCitizenship}
-                            placeholder="e.g. EU citizen — no sponsorship needed"
-                            onChange={(e) => setQualsCitizenship(e.target.value)}
-                        />
-                    </div>
-                    <div className="form-row" style={{ marginBottom: 0 }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={qualsDriversLicense}
-                                onChange={(e) => setQualsDriversLicense(e.target.checked)}
-                            />
-                            Has driver&apos;s licence
-                        </label>
-                    </div>
-                </div>
-                <div style={{ marginTop: 12 }}>
-                    <button className="btn btn-primary" onClick={onSaveQualifications}>Save Qualifications</button>
-                </div>
-            </div>
-
             {/* Filter tabs + Add button */}
             <div style={{ display: 'flex', gap: 4, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                {(['all', ...ENTRY_TYPES] as FilterType[]).map((t) => {
-                    const count = t === 'all' ? entries.length : entries.filter((e) => e.type === t).length
+                {(['all', 'general', ...ENTRY_TYPES] as FilterType[]).map((t) => {
+                    const count = t === 'all' ? entries.length
+                        : t === 'general' ? null
+                        : entries.filter((e) => e.type === t).length
                     return (
                         <button
                             key={t}
                             className={`btn${filter === t ? ' btn-primary' : ''}`}
                             onClick={() => setFilter(t)}
                         >
-                            {t === 'all' ? 'All' : TYPE_LABELS[t]} ({count})
+                            {t === 'all' ? 'All' : t === 'general' ? 'General' : TYPE_LABELS[t]}
+                            {count !== null ? ` (${count})` : ''}
                         </button>
                     )
                 })}
-                <button
-                    data-testid="profile-add-btn"
-                    className="btn btn-primary"
-                    onClick={onAdd}
-                    style={{ marginLeft: 'auto' }}
-                >
-                    + Add Entry
-                </button>
+                {filter !== 'general' && (
+                    <button
+                        data-testid="profile-add-btn"
+                        className="btn btn-primary"
+                        onClick={onAdd}
+                        style={{ marginLeft: 'auto' }}
+                    >
+                        + Add Entry
+                    </button>
+                )}
             </div>
 
-            {/* Entry list */}
-            {filtered.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-dim, #6b7280)' }}>
-                    No entries yet.{' '}
-                    <button className="btn btn-primary" onClick={onAdd}>Add one</button>
-                </div>
-            ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {filtered.map((entry) => (
-                        <div key={entry.id} data-testid={`profile-entry-${entry.id}`} className="card" style={{ margin: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                                {/* Type badge */}
-                                <span style={{
-                                    fontSize: 11,
-                                    fontWeight: 600,
-                                    padding: '2px 8px',
-                                    borderRadius: 4,
-                                    background: TYPE_COLORS[entry.type],
-                                    color: '#fff',
-                                    flexShrink: 0,
-                                    marginTop: 2,
-                                    whiteSpace: 'nowrap',
-                                }}>
-                                    {TYPE_LABELS[entry.type]}
-                                </span>
+            {/* General tab content */}
+            {filter === 'general' && (
+                <GeneralSection
+                    qualsIndustries={qualsIndustries}
+                    qualsLanguages={qualsLanguages}
+                    qualsCitizenship={qualsCitizenship}
+                    qualsDriversLicense={qualsDriversLicense}
+                    setQualsDriversLicense={setQualsDriversLicense}
+                    onAddIndustry={onAddIndustry}
+                    onRemoveIndustry={onRemoveIndustry}
+                    onAddLanguage={onAddLanguage}
+                    onRemoveLanguage={onRemoveLanguage}
+                    onAddCitizenship={onAddCitizenship}
+                    onRemoveCitizenship={onRemoveCitizenship}
+                    onSaveQualifications={onSaveQualifications}
+                />
+            )}
 
-                                {/* Content */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ fontWeight: 600, fontSize: 14, cursor: 'pointer' }} onClick={() => onEdit(entry)}>{entry.title}</div>
-
-                                    {(entry.start_date || entry.end_date) && (
-                                        <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginTop: 2 }}>
-                                            {entry.start_date ?? '?'} → {entry.end_date ?? 'present'}
-                                        </div>
-                                    )}
-
-                                    <div style={{
-                                        fontSize: 13,
-                                        color: 'var(--text-dim, #6b7280)',
-                                        marginTop: 4,
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
+            {/* Entry list (hidden on General tab) */}
+            {filter !== 'general' && (
+                filtered.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-dim, #6b7280)' }}>
+                        No entries yet.{' '}
+                        <button className="btn btn-primary" onClick={onAdd}>Add one</button>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {filtered.map((entry) => (
+                            <div key={entry.id} data-testid={`profile-entry-${entry.id}`} className="card" style={{ margin: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                                    {/* Type badge */}
+                                    <span style={{
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        padding: '2px 8px',
+                                        borderRadius: 4,
+                                        background: TYPE_COLORS[entry.type],
+                                        color: '#fff',
+                                        flexShrink: 0,
+                                        marginTop: 2,
                                         whiteSpace: 'nowrap',
                                     }}>
-                                        {entry.content.slice(0, 130)}{entry.content.length > 130 ? '…' : ''}
+                                        {TYPE_LABELS[entry.type]}
+                                    </span>
+
+                                    {/* Content */}
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ fontWeight: 600, fontSize: 14, cursor: 'pointer' }} onClick={() => onEdit(entry)}>{entry.title}</div>
+
+                                        {(entry.start_date || entry.end_date) && (
+                                            <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginTop: 2 }}>
+                                                {entry.start_date ?? '?'} → {entry.end_date ?? 'present'}
+                                            </div>
+                                        )}
+
+                                        <div style={{
+                                            fontSize: 13,
+                                            color: 'var(--text-dim, #6b7280)',
+                                            marginTop: 4,
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            whiteSpace: 'nowrap',
+                                        }}>
+                                            {entry.content.slice(0, 130)}{entry.content.length > 130 ? '…' : ''}
+                                        </div>
+
+                                        {entry.tags.length > 0 && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                                                {entry.tags.map((tag) => (
+                                                    <span key={tag} style={{
+                                                        fontSize: 11,
+                                                        padding: '1px 6px',
+                                                        borderRadius: 3,
+                                                        background: 'var(--surface-2, #f3f4f6)',
+                                                        color: 'var(--text-dim, #6b7280)',
+                                                    }}>
+                                                        {tag}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {entry.tags.length > 0 && (
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                                            {entry.tags.map((tag) => (
-                                                <span key={tag} style={{
-                                                    fontSize: 11,
-                                                    padding: '1px 6px',
-                                                    borderRadius: 3,
-                                                    background: 'var(--surface-2, #f3f4f6)',
-                                                    color: 'var(--text-dim, #6b7280)',
-                                                }}>
-                                                    {tag}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Actions */}
-                                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                    <button
-                                        data-testid={`profile-entry-edit-${entry.id}`}
-                                        className="btn"
-                                        style={{ fontSize: 12, padding: '3px 10px' }}
-                                        onClick={() => onEdit(entry)}
-                                    >
-                                        Edit
-                                    </button>
-                                    <button
-                                        data-testid={`profile-entry-delete-${entry.id}`}
-                                        className="btn btn-danger"
-                                        style={{ fontSize: 12, padding: '3px 10px' }}
-                                        onClick={() => onDelete(entry.id)}
-                                    >
-                                        Delete
-                                    </button>
+                                    {/* Actions */}
+                                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                                        <button
+                                            data-testid={`profile-entry-edit-${entry.id}`}
+                                            className="btn"
+                                            style={{ fontSize: 12, padding: '3px 10px' }}
+                                            onClick={() => onEdit(entry)}
+                                        >
+                                            Edit
+                                        </button>
+                                        <button
+                                            data-testid={`profile-entry-delete-${entry.id}`}
+                                            className="btn btn-danger"
+                                            style={{ fontSize: 12, padding: '3px 10px' }}
+                                            onClick={() => onDelete(entry.id)}
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                    </div>
+                )
             )}
         </div>
     )

@@ -18,19 +18,29 @@ export interface ProfileEntry {
   created_at: string
 }
 
+export interface LanguageItem {
+  name: string
+  proficiency: string
+}
+
+export interface CitizenshipItem {
+  country: string
+  status: string
+}
+
 export interface UserProfile {
   id: number
   yoe: number | null
-  yoe_industry: string | null
-  languages: string[]
-  citizenship: string | null
+  yoe_industry: string[]
+  languages: LanguageItem[]
+  citizenship: CitizenshipItem[]
   drivers_license: boolean
 }
 
 export interface UserQualificationsInput {
-  yoe_industry: string | null
-  languages: string[]
-  citizenship: string | null
+  yoe_industry: string[]
+  languages: LanguageItem[]
+  citizenship: CitizenshipItem[]
   drivers_license: boolean
 }
 

@@ -4,6 +4,8 @@ import type {
     ProfileEntryType,
     UserProfile,
     UserQualificationsInput,
+    LanguageItem,
+    CitizenshipItem,
     CreateProfileEntryInput,
     UpdateProfileEntryInput,
 } from '../../shared/ipc-types'
@@ -23,9 +25,9 @@ export default function Profile(): React.ReactElement {
     const [busy, setBusy] = useState(false)
     const [pdfImporting, setPdfImporting] = useState(false)
     const [yoeInput, setYoeInput] = useState('')
-    const [qualsIndustry, setQualsIndustry] = useState('')
-    const [qualsLanguages, setQualsLanguages] = useState('')
-    const [qualsCitizenship, setQualsCitizenship] = useState('')
+    const [qualsIndustries, setQualsIndustries] = useState<string[]>([])
+    const [qualsLanguages, setQualsLanguages] = useState<LanguageItem[]>([])
+    const [qualsCitizenship, setQualsCitizenship] = useState<CitizenshipItem[]>([])
     const [qualsDriversLicense, setQualsDriversLicense] = useState(false)
     const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
@@ -42,9 +44,9 @@ export default function Profile(): React.ReactElement {
         setEntries(ents)
         setUserProfile(profile)
         setYoeInput(profile.yoe !== null ? String(profile.yoe) : '')
-        setQualsIndustry(profile.yoe_industry ?? '')
-        setQualsLanguages(profile.languages.join(', '))
-        setQualsCitizenship(profile.citizenship ?? '')
+        setQualsIndustries(profile.yoe_industry)
+        setQualsLanguages(profile.languages)
+        setQualsCitizenship(profile.citizenship)
         setQualsDriversLicense(profile.drivers_license)
     }, [])
 
@@ -53,7 +55,7 @@ export default function Profile(): React.ReactElement {
     // ─── Navigation ──────────────────────────────────────────────────────────
 
     function openAdd(): void {
-        const defaultType: ProfileEntryType = filter !== 'all' ? filter : 'experience'
+        const defaultType: ProfileEntryType = (filter !== 'all' && filter !== 'general') ? filter : 'experience'
         setForm(blankForm(defaultType))
         setEditingId(null)
         setFormError(null)
@@ -145,14 +147,38 @@ export default function Profile(): React.ReactElement {
 
     async function handleSaveQualifications(): Promise<void> {
         const quals: UserQualificationsInput = {
-            yoe_industry: qualsIndustry.trim() || null,
-            languages: qualsLanguages.split(',').map((s) => s.trim()).filter(Boolean),
-            citizenship: qualsCitizenship.trim() || null,
+            yoe_industry: qualsIndustries,
+            languages: qualsLanguages,
+            citizenship: qualsCitizenship,
             drivers_license: qualsDriversLicense,
         }
         await window.api.setUserQualifications(quals)
         setUserProfile((prev) => prev ? { ...prev, ...quals } : prev)
-        flash('Qualifications saved.')
+        flash('General saved.')
+    }
+
+    function handleAddIndustry(industry: string): void {
+        setQualsIndustries((prev) => [...prev, industry])
+    }
+
+    function handleRemoveIndustry(index: number): void {
+        setQualsIndustries((prev) => prev.filter((_, i) => i !== index))
+    }
+
+    function handleAddLanguage(item: LanguageItem): void {
+        setQualsLanguages((prev) => [...prev, item])
+    }
+
+    function handleRemoveLanguage(index: number): void {
+        setQualsLanguages((prev) => prev.filter((_, i) => i !== index))
+    }
+
+    function handleAddCitizenship(item: CitizenshipItem): void {
+        setQualsCitizenship((prev) => [...prev, item])
+    }
+
+    function handleRemoveCitizenship(index: number): void {
+        setQualsCitizenship((prev) => prev.filter((_, i) => i !== index))
     }
 
     async function handleExport(): Promise<void> {
@@ -205,17 +231,20 @@ export default function Profile(): React.ReactElement {
             filter={filter}
             statusMsg={statusMsg}
             yoeInput={yoeInput}
-            qualsIndustry={qualsIndustry}
+            qualsIndustries={qualsIndustries}
             qualsLanguages={qualsLanguages}
             qualsCitizenship={qualsCitizenship}
             qualsDriversLicense={qualsDriversLicense}
             pdfImporting={pdfImporting}
             setFilter={setFilter}
             setYoeInput={setYoeInput}
-            setQualsIndustry={setQualsIndustry}
-            setQualsLanguages={setQualsLanguages}
-            setQualsCitizenship={setQualsCitizenship}
             setQualsDriversLicense={setQualsDriversLicense}
+            onAddIndustry={handleAddIndustry}
+            onRemoveIndustry={handleRemoveIndustry}
+            onAddLanguage={handleAddLanguage}
+            onRemoveLanguage={handleRemoveLanguage}
+            onAddCitizenship={handleAddCitizenship}
+            onRemoveCitizenship={handleRemoveCitizenship}
             onSaveYoe={handleSaveYoe}
             onSaveQualifications={handleSaveQualifications}
             onAdd={openAdd}

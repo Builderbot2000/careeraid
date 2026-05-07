@@ -5,6 +5,7 @@ import type { JobPosting } from './adapters/base'
 import { writeLLMUsage } from './llmUsage'
 import { serializeProfile } from '../resume/agent'
 import { getAllEntries, getUserProfile } from '../profile/repository'
+import type { LanguageItem, CitizenshipItem } from '../profile/models'
 
 const MODEL = 'claude-haiku-4-5'
 
@@ -55,20 +56,20 @@ type AffinityResult = z.infer<typeof AffinityResultSchema>
 
 interface CandidateFacts {
   yoe: number | null
-  yoe_industry: string | null
-  languages: string[]
-  citizenship: string | null
+  yoe_industry: string[]
+  languages: LanguageItem[]
+  citizenship: CitizenshipItem[]
   drivers_license: boolean
 }
 
 function buildCandidateFactsBlock(facts: CandidateFacts): string {
   const lines: string[] = []
   if (facts.yoe !== null) {
-    const industry = facts.yoe_industry ? ` (industry: ${facts.yoe_industry})` : ''
+    const industry = facts.yoe_industry.length ? ` (industries: ${facts.yoe_industry.join(', ')})` : ''
     lines.push(`- Total professional experience: ${facts.yoe} years${industry}`)
   }
-  if (facts.citizenship) lines.push(`- Citizenship / visa: ${facts.citizenship}`)
-  if (facts.languages.length) lines.push(`- Languages: ${facts.languages.join(', ')}`)
+  if (facts.citizenship.length) lines.push(`- Citizenship / visa: ${facts.citizenship.map((c) => `${c.country} (${c.status})`).join('; ')}`)
+  if (facts.languages.length) lines.push(`- Languages: ${facts.languages.map((l) => `${l.name} (${l.proficiency})`).join(', ')}`)
   if (facts.drivers_license) lines.push(`- Driver's licence: Yes`)
   return lines.length
     ? `## Candidate Facts (Authoritative)\nThese are ground-truth facts — they override any inferences from the profile text below.\n${lines.join('\n')}`

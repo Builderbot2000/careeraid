@@ -21,19 +21,31 @@ export const ProfileEntrySchema = z.object({
 
 export type ProfileEntry = z.infer<typeof ProfileEntrySchema>
 
+export const LanguageItemSchema = z.object({
+  name: z.string(),
+  proficiency: z.string(),
+})
+export type LanguageItem = z.infer<typeof LanguageItemSchema>
+
+export const CitizenshipItemSchema = z.object({
+  country: z.string(),
+  status: z.string(),
+})
+export type CitizenshipItem = z.infer<typeof CitizenshipItemSchema>
+
 export const UserProfileSchema = z.object({
   id: z.number(),
   yoe: z.number().int().nonnegative().nullable(),
-  yoe_industry: z.string().nullable(),
-  languages: z.array(z.string()),
-  citizenship: z.string().nullable(),
+  yoe_industry: z.array(z.string()),
+  languages: z.array(LanguageItemSchema),
+  citizenship: z.array(CitizenshipItemSchema),
   drivers_license: z.boolean(),
 })
 
 export const UserQualificationsSchema = z.object({
-  yoe_industry: z.string().nullable(),
-  languages: z.array(z.string()),
-  citizenship: z.string().nullable(),
+  yoe_industry: z.array(z.string()),
+  languages: z.array(LanguageItemSchema),
+  citizenship: z.array(CitizenshipItemSchema),
   drivers_license: z.boolean(),
 })
 
