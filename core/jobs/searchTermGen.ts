@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { randomUUID } from 'crypto'
 import Database from 'better-sqlite3'
-import type { SearchTerm, SearchTermSeniority, Recency } from '../../src/shared/ipc-types'
+import type { SearchTerm, SearchTermSeniority, Recency, GenConstraints } from '../../src/shared/ipc-types'
 import { writeLLMUsage } from './llmUsage'
 import { getAllEntries } from '../profile/repository'
 import type { ProfileEntry } from '../profile/models'
@@ -26,18 +26,18 @@ User intent: "${intent}"
 
 Return ONLY a valid JSON array with this exact shape — no markdown, no commentary:
 [
-  { "role": "senior backend engineer", "location": "San Francisco, CA", "seniority": "senior", "remote": false, "recency": "week" },
-  { "role": "staff software engineer TypeScript", "location": null, "seniority": "staff", "remote": true, "recency": null }
+  { "role": "Backend Engineer", "location": "San Francisco, CA", "seniority": "senior", "remote": false, "recency": "week" },
+  { "role": "ML Engineer", "location": null, "seniority": "mid", "remote": true, "recency": null }
 ]
 
 Rules:
 - 3–6 terms total
-- "role" is a concise job title or keyword phrase for a job board search field
+- "role" must be a 2–4 word job title only (e.g. "Python Developer", "Senior Backend Engineer", "ML Engineer") — no tech stack lists, no conjunctions, no extra adjectives beyond seniority
 - "location" is a city/region string or null for no location filter
 - "seniority" is one of: intern, junior, mid, senior, staff — or null for any
 - "remote" is true or false
 - "recency" is one of: day, week, month — or null for no time filter
-- Vary role phrasing (job title variations, tech keywords, seniority levels)
+- Vary role phrasing with different job title angles (not tech keyword lists)
 - No duplicate roles`
 }
 
@@ -45,6 +45,7 @@ export async function generateSearchTerms(
   db: Database.Database,
   apiKey: string,
   intent: string,
+  constraints?: GenConstraints,
 ): Promise<SearchTerm[]> {
   const client = new Anthropic({ apiKey })
 
@@ -79,7 +80,7 @@ export async function generateSearchTerms(
   const insertStmt = db.prepare(
     `INSERT INTO search_terms
        (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
-     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, NULL)`,
+     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, @max_results)`,
   )
   const now = new Date().toISOString()
 
@@ -93,26 +94,55 @@ export async function generateSearchTerms(
       if (typeof t.role !== 'string' || !t.role.trim()) continue
       const role = t.role.trim()
       if (existingRoles.has(role.toLowerCase())) continue
-      const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
-      const locations = location ? JSON.stringify([location]) : null
-      const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
-      const seniorities = seniority ? JSON.stringify([seniority]) : null
-      // LLM generates remote=true → work_type=['remote'], remote=false → null
-      const work_type = t.remote === true ? JSON.stringify(['remote']) : null
-      const recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+
+      // Apply constraints (override LLM-chosen values when user has locked a field)
+      let locations: string | null
+      let seniorities: string | null
+      let work_type: string | null
+      let recency: Recency | null
+      let max_results: number | null
+
+      if (constraints?.locations?.length) {
+        locations = JSON.stringify(constraints.locations)
+      } else {
+        const loc = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
+        locations = loc ? JSON.stringify([loc]) : null
+      }
+
+      if (constraints?.seniorities?.length) {
+        seniorities = JSON.stringify(constraints.seniorities)
+      } else {
+        const sen = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
+        seniorities = sen ? JSON.stringify([sen]) : null
+      }
+
+      if (constraints?.work_type?.length) {
+        work_type = JSON.stringify(constraints.work_type)
+      } else {
+        work_type = t.remote === true ? JSON.stringify(['remote']) : null
+      }
+
+      if (constraints?.recency) {
+        recency = constraints.recency
+      } else {
+        recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+      }
+
+      max_results = constraints?.max_results ?? null
+
       const id = randomUUID()
-      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency })
+      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency, max_results })
       inserted.push({
         id,
         term: role,
         enabled: true,
         source: 'llm_generated',
         created_at: now,
-        locations: location ? [location] : null,
-        seniorities: seniority ? [seniority] : null,
+        locations: locations ? JSON.parse(locations) as string[] : null,
+        seniorities: seniorities ? JSON.parse(seniorities) as SearchTermSeniority[] : null,
         work_type: work_type ? JSON.parse(work_type) as Array<'remote'|'hybrid'|'onsite'> : null,
         recency,
-        max_results: null,
+        max_results,
       })
     }
   })()
@@ -134,24 +164,25 @@ ${formatted}
 
 Return ONLY a valid JSON array with this exact shape — no markdown, no commentary:
 [
-  { "role": "senior backend engineer", "location": null, "seniority": "senior", "remote": true, "recency": "week" },
-  { "role": "staff software engineer TypeScript", "location": null, "seniority": "staff", "remote": true, "recency": null }
+  { "role": "Backend Engineer", "location": null, "seniority": "senior", "remote": true, "recency": "week" },
+  { "role": "ML Engineer", "location": null, "seniority": "mid", "remote": true, "recency": null }
 ]
 
 Rules:
 - 3–6 terms total
-- "role" is a concise job title or keyword phrase derived from the profile's experience and skills
+- "role" must be a 2–4 word job title only (e.g. "Python Developer", "Senior Backend Engineer", "ML Engineer") — no tech stack lists, no conjunctions, no extra adjectives beyond seniority
 - "location" is a city/region string or null for no location filter
 - "seniority" is one of: intern, junior, mid, senior, staff — or null for any
 - "remote" is true or false
 - "recency" is one of: day, week, month — or null for no time filter
-- Vary role phrasing (job title variations, tech keywords, seniority levels)
+- Vary role phrasing with different job title angles (not tech keyword lists)
 - No duplicate roles`
 }
 
 export async function generateSearchTermsFromProfile(
   db: Database.Database,
   apiKey: string,
+  constraints?: GenConstraints,
 ): Promise<SearchTerm[]> {
   const allEntries = getAllEntries(db)
   const entries = allEntries.filter((e) => e.type === 'experience' || e.type === 'skill')
@@ -189,7 +220,7 @@ export async function generateSearchTermsFromProfile(
   const insertStmt = db.prepare(
     `INSERT INTO search_terms
        (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
-     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, NULL)`,
+     VALUES (@id, @term, 1, 'llm_generated', @created_at, @locations, @seniorities, @work_type, @recency, @max_results)`,
   )
   const now = new Date().toISOString()
 
@@ -203,25 +234,54 @@ export async function generateSearchTermsFromProfile(
       if (typeof t.role !== 'string' || !t.role.trim()) continue
       const role = t.role.trim()
       if (existingRoles2.has(role.toLowerCase())) continue
-      const location = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
-      const locations = location ? JSON.stringify([location]) : null
-      const seniority = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
-      const seniorities = seniority ? JSON.stringify([seniority]) : null
-      const work_type = t.remote === true ? JSON.stringify(['remote']) : null
-      const recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+
+      let locations: string | null
+      let seniorities: string | null
+      let work_type: string | null
+      let recency: Recency | null
+      let max_results: number | null
+
+      if (constraints?.locations?.length) {
+        locations = JSON.stringify(constraints.locations)
+      } else {
+        const loc = typeof t.location === 'string' && t.location.trim() ? t.location.trim() : null
+        locations = loc ? JSON.stringify([loc]) : null
+      }
+
+      if (constraints?.seniorities?.length) {
+        seniorities = JSON.stringify(constraints.seniorities)
+      } else {
+        const sen = (t.seniority && VALID_SENIORITIES.has(t.seniority) ? t.seniority : null) as SearchTermSeniority | null
+        seniorities = sen ? JSON.stringify([sen]) : null
+      }
+
+      if (constraints?.work_type?.length) {
+        work_type = JSON.stringify(constraints.work_type)
+      } else {
+        work_type = t.remote === true ? JSON.stringify(['remote']) : null
+      }
+
+      if (constraints?.recency) {
+        recency = constraints.recency
+      } else {
+        recency = (t.recency && VALID_RECENCIES.has(t.recency) ? t.recency : null) as Recency | null
+      }
+
+      max_results = constraints?.max_results ?? null
+
       const id = randomUUID()
-      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency })
+      insertStmt.run({ id, term: role, created_at: now, locations, seniorities, work_type, recency, max_results })
       inserted.push({
         id,
         term: role,
         enabled: true,
         source: 'llm_generated',
         created_at: now,
-        locations: location ? [location] : null,
-        seniorities: seniority ? [seniority] : null,
+        locations: locations ? JSON.parse(locations) as string[] : null,
+        seniorities: seniorities ? JSON.parse(seniorities) as SearchTermSeniority[] : null,
         work_type: work_type ? JSON.parse(work_type) as Array<'remote'|'hybrid'|'onsite'> : null,
         recency,
-        max_results: null,
+        max_results,
       })
     }
   })()

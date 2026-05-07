@@ -8,10 +8,19 @@ interface EntryListProps {
     filter: FilterType
     statusMsg: string | null
     yoeInput: string
+    qualsIndustry: string
+    qualsLanguages: string
+    qualsCitizenship: string
+    qualsDriversLicense: boolean
     pdfImporting: boolean
     setFilter: (f: FilterType) => void
     setYoeInput: (v: string) => void
+    setQualsIndustry: (v: string) => void
+    setQualsLanguages: (v: string) => void
+    setQualsCitizenship: (v: string) => void
+    setQualsDriversLicense: (v: boolean) => void
     onSaveYoe: () => void
+    onSaveQualifications: () => void
     onAdd: () => void
     onEdit: (entry: ProfileEntry) => void
     onDelete: (id: string) => void
@@ -25,10 +34,19 @@ export function EntryList({
     filter,
     statusMsg,
     yoeInput,
+    qualsIndustry,
+    qualsLanguages,
+    qualsCitizenship,
+    qualsDriversLicense,
     pdfImporting,
     setFilter,
     setYoeInput,
+    setQualsIndustry,
+    setQualsLanguages,
+    setQualsCitizenship,
+    setQualsDriversLicense,
     onSaveYoe,
+    onSaveQualifications,
     onAdd,
     onEdit,
     onDelete,
@@ -85,6 +103,59 @@ export function EntryList({
                         {statusMsg}
                     </div>
                 )}
+            </div>
+
+            {/* Fixed qualifications card */}
+            <div className="card">
+                <div style={{ fontWeight: 600, marginBottom: 12 }}>Fixed Qualifications</div>
+                <div style={{ fontSize: 12, color: 'var(--text-dim, #6b7280)', marginBottom: 12 }}>
+                    Authoritative facts fed directly to the job evaluator — overrides inferences from your experience text.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px', alignItems: 'end' }}>
+                    <div className="form-row" style={{ marginBottom: 0 }}>
+                        <label htmlFor="quals-industry">Industry (for YOE context)</label>
+                        <input
+                            id="quals-industry"
+                            type="text"
+                            value={qualsIndustry}
+                            placeholder="e.g. fintech, SaaS, healthcare"
+                            onChange={(e) => setQualsIndustry(e.target.value)}
+                        />
+                    </div>
+                    <div className="form-row" style={{ marginBottom: 0 }}>
+                        <label htmlFor="quals-languages">Spoken languages</label>
+                        <input
+                            id="quals-languages"
+                            type="text"
+                            value={qualsLanguages}
+                            placeholder="e.g. English, French"
+                            onChange={(e) => setQualsLanguages(e.target.value)}
+                        />
+                    </div>
+                    <div className="form-row" style={{ marginBottom: 0 }}>
+                        <label htmlFor="quals-citizenship">Citizenship / visa status</label>
+                        <input
+                            id="quals-citizenship"
+                            type="text"
+                            value={qualsCitizenship}
+                            placeholder="e.g. EU citizen — no sponsorship needed"
+                            onChange={(e) => setQualsCitizenship(e.target.value)}
+                        />
+                    </div>
+                    <div className="form-row" style={{ marginBottom: 0 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={qualsDriversLicense}
+                                onChange={(e) => setQualsDriversLicense(e.target.checked)}
+                            />
+                            Has driver&apos;s licence
+                        </label>
+                    </div>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                    <button className="btn btn-primary" onClick={onSaveQualifications}>Save Qualifications</button>
+                </div>
             </div>
 
             {/* Filter tabs + Add button */}

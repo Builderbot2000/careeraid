@@ -3,6 +3,7 @@ import type {
     ProfileEntry,
     ProfileEntryType,
     UserProfile,
+    UserQualificationsInput,
     CreateProfileEntryInput,
     UpdateProfileEntryInput,
 } from '../../shared/ipc-types'
@@ -22,6 +23,10 @@ export default function Profile(): React.ReactElement {
     const [busy, setBusy] = useState(false)
     const [pdfImporting, setPdfImporting] = useState(false)
     const [yoeInput, setYoeInput] = useState('')
+    const [qualsIndustry, setQualsIndustry] = useState('')
+    const [qualsLanguages, setQualsLanguages] = useState('')
+    const [qualsCitizenship, setQualsCitizenship] = useState('')
+    const [qualsDriversLicense, setQualsDriversLicense] = useState(false)
     const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
     function flash(msg: string): void {
@@ -37,6 +42,10 @@ export default function Profile(): React.ReactElement {
         setEntries(ents)
         setUserProfile(profile)
         setYoeInput(profile.yoe !== null ? String(profile.yoe) : '')
+        setQualsIndustry(profile.yoe_industry ?? '')
+        setQualsLanguages(profile.languages.join(', '))
+        setQualsCitizenship(profile.citizenship ?? '')
+        setQualsDriversLicense(profile.drivers_license)
     }, [])
 
     useEffect(() => { load() }, [load])
@@ -134,6 +143,18 @@ export default function Profile(): React.ReactElement {
         flash('YOE saved.')
     }
 
+    async function handleSaveQualifications(): Promise<void> {
+        const quals: UserQualificationsInput = {
+            yoe_industry: qualsIndustry.trim() || null,
+            languages: qualsLanguages.split(',').map((s) => s.trim()).filter(Boolean),
+            citizenship: qualsCitizenship.trim() || null,
+            drivers_license: qualsDriversLicense,
+        }
+        await window.api.setUserQualifications(quals)
+        setUserProfile((prev) => prev ? { ...prev, ...quals } : prev)
+        flash('Qualifications saved.')
+    }
+
     async function handleExport(): Promise<void> {
         const filePath = await window.api.exportProfileMarkdown()
         if (filePath) flash(`Exported to ${filePath}`)
@@ -184,10 +205,19 @@ export default function Profile(): React.ReactElement {
             filter={filter}
             statusMsg={statusMsg}
             yoeInput={yoeInput}
+            qualsIndustry={qualsIndustry}
+            qualsLanguages={qualsLanguages}
+            qualsCitizenship={qualsCitizenship}
+            qualsDriversLicense={qualsDriversLicense}
             pdfImporting={pdfImporting}
             setFilter={setFilter}
             setYoeInput={setYoeInput}
+            setQualsIndustry={setQualsIndustry}
+            setQualsLanguages={setQualsLanguages}
+            setQualsCitizenship={setQualsCitizenship}
+            setQualsDriversLicense={setQualsDriversLicense}
             onSaveYoe={handleSaveYoe}
+            onSaveQualifications={handleSaveQualifications}
             onAdd={openAdd}
             onEdit={openEdit}
             onDelete={handleDelete}

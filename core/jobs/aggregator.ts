@@ -86,7 +86,57 @@ interface Counters {
   dupes: number
   ban_excluded: number
   keyword_filtered: number
+  term_filtered: number
   netNew: number
+}
+
+// ─── Post-parse search term constraint filter ─────────────────────────────────
+
+interface RunConstraints {
+  seniorities?: Array<'intern' | 'junior' | 'mid' | 'senior' | 'staff'>
+  workTypes?: Array<'remote' | 'hybrid' | 'onsite'>
+  location?: string
+  recency?: string
+}
+
+function matchesRunConstraints(posting: Omit<JobPosting, 'id'>, run: RunConstraints): boolean {
+  const locLower = posting.location.toLowerCase()
+
+  // Seniority: bypass when adapter couldn't determine seniority ('any')
+  if (run.seniorities?.length && posting.seniority !== 'any') {
+    if (!run.seniorities.includes(posting.seniority)) return false
+  }
+
+  // Work type — inferred from location string keywords
+  if (run.workTypes?.length) {
+    const isRemote = locLower.includes('remote')
+    const isHybrid = locLower.includes('hybrid')
+    const isOnsite = !isRemote
+
+    const allowed = new Set(run.workTypes)
+    let ok = false
+    if (allowed.has('remote') && isRemote) ok = true
+    if (allowed.has('hybrid') && isHybrid) ok = true
+    if (allowed.has('onsite') && isOnsite) ok = true
+    if (!ok) return false
+  }
+
+  // Location: city-name substring match; remote postings bypass (valid everywhere)
+  if (run.location) {
+    const city = run.location.split(',')[0].trim().toLowerCase()
+    if (city.length > 2 && !locLower.includes(city) && !locLower.includes('remote')) {
+      return false
+    }
+  }
+
+  // Recency: verify posted_at falls within the requested window
+  if (run.recency && posting.posted_at) {
+    const ageDays = (Date.now() - new Date(posting.posted_at).getTime()) / 86_400_000
+    const maxDays = run.recency === 'day' ? 1 : run.recency === 'week' ? 7 : 30
+    if (ageDays > maxDays) return false
+  }
+
+  return true
 }
 
 function processPosting(
@@ -98,6 +148,7 @@ function processPosting(
   banConfig: { companyBans: string[]; domainBans: Set<string> },
   keywordConfig: { required: string[]; excluded: string[]; matchFields: string[] },
   counters: Counters,
+  runConstraints?: RunConstraints,
 ): JobPosting | null {
   counters.fetched++
 
@@ -145,6 +196,12 @@ function processPosting(
     }
   }
 
+  // Search term constraint filter (post-parse re-check of seniority/work-type/location/recency)
+  if (runConstraints && !matchesRunConstraints(posting, runConstraints)) {
+    counters.term_filtered++
+    return null
+  }
+
   // Insert
   const full: JobPosting = { ...posting, id: randomUUID() } as JobPosting
   insert.run({
@@ -190,7 +247,7 @@ export async function runScrape(
     ).map((r) => compositeKey(r.company, r.title, r.posted_at)),
   )
 
-  const counters: Counters = { fetched: 0, dupes: 0, ban_excluded: 0, keyword_filtered: 0, netNew: 0 }
+  const counters: Counters = { fetched: 0, dupes: 0, ban_excluded: 0, keyword_filtered: 0, term_filtered: 0, netNew: 0 }
 
   // Load ban list once
   const bans = db.prepare('SELECT type, value FROM ban_list').all() as {
@@ -289,6 +346,13 @@ export async function runScrape(
           if (run.recency) filters.recency = run.recency
           if (run.maxResults != null) filters.maxResults = run.maxResults
 
+          const runConstraints: RunConstraints = {
+            seniorities: run.seniorities ?? undefined,
+            workTypes: run.workTypes ?? undefined,
+            location: run.location,
+            recency: run.recency,
+          }
+
           try {
             await adapter.search(
               run.term,
@@ -300,6 +364,7 @@ export async function runScrape(
                   db, insert, posting,
                   existingUrls, existingComposites,
                   banConfig, keywordConfig, counters,
+                  runConstraints,
                 )
                 if (committed) onPostingCommitted?.(committed)
               },
@@ -333,5 +398,6 @@ export async function runScrape(
     netNew: counters.netNew,
     ban_excluded: counters.ban_excluded,
     keyword_filtered: counters.keyword_filtered,
+    term_filtered: counters.term_filtered,
   }
 }

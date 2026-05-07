@@ -16,6 +16,8 @@ import sql014 from './014_typst.sql?raw'
 import sql015 from './015_job_postings_applied_at.sql?raw'
 import sql016 from './016_affinity_classes.sql?raw'
 import sql017 from './017_clear_affinity_skipped.sql?raw'
+import sql018 from './018_applications_template_name.sql?raw'
+import sql019 from './019_user_qualifications.sql?raw'
 
 interface MigrationRecord {
   filename: string
@@ -39,6 +41,8 @@ const MIGRATIONS: ReadonlyArray<{ filename: string; sql: string }> = [
   { filename: '015_job_postings_applied_at.sql', sql: sql015 },
   { filename: '016_affinity_classes.sql', sql: sql016 },
   { filename: '017_clear_affinity_skipped.sql', sql: sql017 },
+  { filename: '018_applications_template_name.sql', sql: sql018 },
+  { filename: '019_user_qualifications.sql', sql: sql019 },
 ]
 
 export function runMigrations(

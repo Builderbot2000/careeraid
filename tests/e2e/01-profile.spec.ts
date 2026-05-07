@@ -52,6 +52,8 @@ test.describe('Profile Module', () => {
     await goTo(page, 'Settings')
     const wordLimitInput = page.getByLabel(/Profile entry word limit|Word limit/i)
     await wordLimitInput.fill('5')
+    await page.getByTestId('settings-save-profile-llm').click()
+    await expect(page.getByText('Saved').first()).toBeVisible({ timeout: 3_000 })
 
     await goTo(page, 'Profile')
     await page.getByRole('button', { name: /New Entry|Add Entry/i }).click()
@@ -71,6 +73,33 @@ test.describe('Profile Module', () => {
     await expect(page.getByText(/3 word/i)).toBeVisible()
     await page.getByLabel('Content').fill('hello world')
     await expect(page.getByText(/2 word/i)).toBeVisible()
+  })
+
+  test('fixed qualifications card is visible on the Profile view', async ({ page }) => {
+    await goTo(page, 'Profile')
+    await expect(page.getByText('Fixed Qualifications')).toBeVisible()
+    await expect(page.getByLabel('Industry (for YOE context)')).toBeVisible()
+    await expect(page.getByLabel('Spoken languages')).toBeVisible()
+    await expect(page.getByLabel('Citizenship / visa status')).toBeVisible()
+    await expect(page.getByText("Has driver's licence")).toBeVisible()
+  })
+
+  test('qualifications are saved and persist after navigating away', async ({ page }) => {
+    await goTo(page, 'Profile')
+
+    await page.getByLabel('Industry (for YOE context)').fill('fintech')
+    await page.getByLabel('Spoken languages').fill('English, French')
+    await page.getByLabel('Citizenship / visa status').fill('EU citizen')
+    await page.getByRole('button', { name: 'Save Qualifications' }).click()
+    await expect(page.getByText(/Qualifications saved/i)).toBeVisible({ timeout: 3_000 })
+
+    // Navigate away and back — the page re-fetches from DB on mount
+    await goTo(page, 'Settings')
+    await goTo(page, 'Profile')
+
+    await expect(page.getByLabel('Industry (for YOE context)')).toHaveValue('fintech')
+    await expect(page.getByLabel('Spoken languages')).toHaveValue('English, French')
+    await expect(page.getByLabel('Citizenship / visa status')).toHaveValue('EU citizen')
   })
 
   test('filters entries by type tag', async ({ page }) => {

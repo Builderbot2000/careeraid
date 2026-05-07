@@ -127,4 +127,54 @@ test.describe('Search Term Management', () => {
     await expect(page.getByText('updated term text')).toBeVisible()
     await expect(page.getByText('original term text')).not.toBeVisible()
   })
+
+  test('generation constraints section renders all fields', async ({ page }) => {
+    await goTo(page, 'Search')
+    const constraints = page.getByTestId('gen-constraints')
+    await expect(constraints).toBeVisible()
+    // Seniority checkboxes (exact to avoid matching the "Seniority" group label)
+    await expect(constraints.getByText('Senior', { exact: true })).toBeVisible()
+    await expect(constraints.getByText('Junior', { exact: true })).toBeVisible()
+    // Work type checkboxes
+    await expect(constraints.getByText('Remote', { exact: true })).toBeVisible()
+    await expect(constraints.getByText('Hybrid', { exact: true })).toBeVisible()
+    await expect(constraints.getByText('Onsite', { exact: true })).toBeVisible()
+    // Recency select
+    await expect(constraints.getByRole('combobox')).toBeVisible()
+  })
+
+  test('work_type and recency constraints are applied to generated terms', async ({ page }) => {
+    await goTo(page, 'Search')
+    const constraints = page.getByTestId('gen-constraints')
+
+    // Set work_type = remote
+    await constraints.getByText('Remote').click()
+    // Set recency = week
+    await constraints.getByRole('combobox').selectOption('week')
+
+    // Generate from intent
+    await page.getByTestId('search-generate-btn').click()
+    await expect(page.getByText(/senior backend engineer remote/i)).toBeVisible({ timeout: 10_000 })
+
+    // All generated terms should show the remote chip and past week chip
+    const termRows = page.locator('li').filter({ has: page.getByText('AI') })
+    const firstTerm = termRows.first()
+    // Use exact to avoid matching the term name text which may also contain "remote"
+    await expect(firstTerm.getByText('remote', { exact: true })).toBeVisible()
+    await expect(firstTerm.getByText('past week', { exact: true })).toBeVisible()
+  })
+
+  test('constraints are also applied when generating from profile', async ({ page }) => {
+    await goTo(page, 'Search')
+    const constraints = page.getByTestId('gen-constraints')
+
+    // Set recency = month
+    await constraints.getByRole('combobox').selectOption('month')
+
+    await page.getByTestId('search-generate-from-profile-btn').click()
+    await expect(page.getByText(/senior backend engineer remote/i)).toBeVisible({ timeout: 10_000 })
+
+    const termRows = page.locator('li').filter({ has: page.getByText('AI') })
+    await expect(termRows.first().getByText('past month')).toBeVisible()
+  })
 })

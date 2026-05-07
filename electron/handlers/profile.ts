@@ -10,12 +10,13 @@ import {
   deleteEntry,
   getUserProfile,
   setUserYoe,
+  setUserQualifications,
   exportToMarkdown,
   importFromMarkdown,
   countWords,
 } from '../../core/profile/repository'
 import { importProfileFromResumePdf } from '../../core/profile/resumeImporter'
-import { CreateProfileEntrySchema, UpdateProfileEntrySchema } from '../../core/profile/models'
+import { CreateProfileEntrySchema, UpdateProfileEntrySchema, UserQualificationsSchema } from '../../core/profile/models'
 import { getSettings } from '../settings'
 import type { FeatureLocks } from '../../src/shared/ipc-types'
 import type { BrowserWindow } from 'electron'
@@ -65,6 +66,12 @@ export function registerProfileHandlers(
   ipcMain.handle('profile:set-yoe', (_event, yoe: unknown) => {
     const val = yoe === null ? null : typeof yoe === 'number' ? Math.floor(yoe) : null
     setUserYoe(getDb(), val)
+  })
+
+  ipcMain.handle('profile:set-qualifications', (_event, input: unknown) => {
+    const parsed = UserQualificationsSchema.safeParse(input)
+    if (!parsed.success) throw new Error(parsed.error.message)
+    setUserQualifications(getDb(), parsed.data)
   })
 
   ipcMain.handle('profile:export', async () => {

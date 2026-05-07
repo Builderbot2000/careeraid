@@ -61,6 +61,37 @@ function resolveTypstBin(): string {
   return 'typst'
 }
 
+function checkTypstLock(): boolean {
+  try {
+    const bin = resolveTypstBin()
+    if (bin === 'typst') {
+      try {
+        execFileSync('typst', ['--version'], { stdio: 'ignore', timeout: 3000 })
+        return false
+      } catch {
+        return true
+      }
+    }
+    return !fs.existsSync(bin)
+  } catch {
+    return true
+  }
+}
+
+function checkPlaywrightLock(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { registry } = require('playwright-core/lib/server/registry/index') as {
+      registry: { findExecutable(n: string): { executablePath(): string | undefined } | undefined }
+    }
+    const chromiumPath = registry.findExecutable('chromium')?.executablePath()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return !chromiumPath || !require('fs').existsSync(chromiumPath)
+  } catch {
+    return true
+  }
+}
+
 /** Populated in app.whenReady() by loadAdapters() before IPC handlers run. */
 let ALL_ADAPTERS: BaseAdapter[] = []
 
@@ -216,34 +247,10 @@ async function runStartupValidation(): Promise<{
   }
 
   // Feature lock: Typst binary
-  try {
-    const bin = resolveTypstBin()
-    if (bin === 'typst') {
-      // System-path fallback — probe it
-      try {
-        execFileSync('typst', ['--version'], { stdio: 'ignore', timeout: 3000 })
-        featureLocks.typst = false
-      } catch {
-        featureLocks.typst = true
-      }
-    } else {
-      featureLocks.typst = !fs.existsSync(bin)
-    }
-  } catch {
-    featureLocks.typst = true
-  }
+  featureLocks.typst = checkTypstLock()
 
   // Feature lock: Playwright Chromium
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { registry } = require('playwright-core/lib/server/registry/index') as {
-      registry: { findExecutable(n: string): { executablePath(): string | undefined } | undefined }
-    }
-    const chromiumPath = registry.findExecutable('chromium')?.executablePath()
-    featureLocks.playwrightChromium = !chromiumPath || !require('fs').existsSync(chromiumPath)
-  } catch {
-    featureLocks.playwrightChromium = true
-  }
+  featureLocks.playwrightChromium = checkPlaywrightLock()
 
   // Feature lock: profile empty (table may not exist until Phase 2)
   try {
@@ -277,6 +284,13 @@ function registerIpcHandlers(appRoot: string): void {
     currentFeatureLocks = { ...currentFeatureLocks, ...patch }
     mainWindow?.webContents.send('startup:feature-locks', { ...currentFeatureLocks })
   }
+
+  ipcMain.handle('startup:refresh-locks', () => {
+    pushFeatureLocks({
+      typst: checkTypstLock(),
+      playwrightChromium: checkPlaywrightLock(),
+    })
+  })
 
   registerSettingsHandlers(getMainWindow, pushFeatureLocks)
   registerProfileHandlers(pushFeatureLocks)

@@ -10,7 +10,7 @@ import path from 'path'
 import fs from 'fs'
 import { getDb } from '../db/database'
 import { STUB_SEARCH_TERMS, STUB_RESUME_DATA, STUB_PDF_IMPORT_ENTRIES, stubAffinityScore } from '../tests/e2e/fixtures/claude-stubs'
-import type { SearchTerm } from '../src/shared/ipc-types'
+import type { SearchTerm, GenConstraints, Recency } from '../src/shared/ipc-types'
 import { renderTyp } from '../core/resume/renderer'
 import { compileTyp } from '../core/resume/compiler'
 import { pdfPathToUrl } from '../core/resume/previewer'
@@ -18,6 +18,38 @@ import { app } from 'electron'
 import { runScrape } from '../core/jobs/aggregator'
 import { MockAdapter } from '../core/jobs/adapters/mock'
 import { getFilteredRankedPostings } from '../core/jobs/ranker'
+
+function insertStubTermsWithConstraints(constraints?: GenConstraints): SearchTerm[] {
+  const db = getDb()
+  const now = new Date().toISOString()
+
+  db.prepare("DELETE FROM search_terms WHERE source = 'llm_generated'").run()
+
+  const inserted: SearchTerm[] = []
+  for (const t of STUB_SEARCH_TERMS) {
+    const id = randomUUID()
+    const locations = constraints?.locations?.length ? JSON.stringify(constraints.locations) : null
+    const seniorities = constraints?.seniorities?.length ? JSON.stringify(constraints.seniorities) : null
+    const work_type = constraints?.work_type?.length ? JSON.stringify(constraints.work_type) : null
+    const recency = constraints?.recency ?? null
+    const max_results = constraints?.max_results ?? null
+    db.prepare(
+      `INSERT INTO search_terms (id, term, enabled, source, created_at, locations, seniorities, work_type, recency, max_results)
+       VALUES (?, ?, 1, 'llm_generated', ?, ?, ?, ?, ?, ?)`,
+    ).run(id, t.term, now, locations, seniorities, work_type, recency, max_results)
+    inserted.push({
+      ...t,
+      id,
+      created_at: now,
+      locations: constraints?.locations ?? null,
+      seniorities: constraints?.seniorities ?? null,
+      work_type: constraints?.work_type ?? null,
+      recency: recency as Recency | null,
+      max_results,
+    })
+  }
+  return inserted
+}
 
 export function registerTestStubs(): void {
   // ─── Scrape — add a small delay so the 'Running…' UI state is observable ────
@@ -36,44 +68,16 @@ export function registerTestStubs(): void {
 
   // ─── Search term generation ─────────────────────────────────────────────────
   // Override: return deterministic AI-suggested terms without calling Claude.
+  // Constraints are applied so tests can verify the full constraint flow.
   ipcMain.removeHandler('search-terms:generate')
-  ipcMain.handle('search-terms:generate', () => {
-    const db = getDb()
-    const now = new Date().toISOString()
-
-    // Clear existing llm_generated terms (same behaviour as real handler)
-    db.prepare("DELETE FROM search_terms WHERE source = 'llm_generated'").run()
-
-    const inserted: SearchTerm[] = []
-    for (const t of STUB_SEARCH_TERMS) {
-      const id = randomUUID()
-      db.prepare(
-        `INSERT INTO search_terms (id, term, enabled, source, created_at)
-         VALUES (?, ?, 1, 'llm_generated', ?)`,
-      ).run(id, t.term, now)
-      inserted.push({ ...t, id, created_at: now })
-    }
-    return inserted
+  ipcMain.handle('search-terms:generate', (_event, constraints?: GenConstraints) => {
+    return insertStubTermsWithConstraints(constraints)
   })
 
   // ─── Search term generation from profile ────────────────────────────────────
   ipcMain.removeHandler('search-terms:generate-from-profile')
-  ipcMain.handle('search-terms:generate-from-profile', () => {
-    const db = getDb()
-    const now = new Date().toISOString()
-
-    db.prepare("DELETE FROM search_terms WHERE source = 'llm_generated'").run()
-
-    const inserted: SearchTerm[] = []
-    for (const t of STUB_SEARCH_TERMS) {
-      const id = randomUUID()
-      db.prepare(
-        `INSERT INTO search_terms (id, term, enabled, source, created_at)
-         VALUES (?, ?, 1, 'llm_generated', ?)`,
-      ).run(id, t.term, now)
-      inserted.push({ ...t, id, created_at: now })
-    }
-    return inserted
+  ipcMain.handle('search-terms:generate-from-profile', (_event, constraints?: GenConstraints) => {
+    return insertStubTermsWithConstraints(constraints)
   })
 
   // ─── Affinity scoring (ranker) ──────────────────────────────────────────────
@@ -170,6 +174,7 @@ export function registerTestStubs(): void {
 
   // ─── Direct-path import (test-only) ───────────────────────────────────────
   // Allows tests to import from a specific file path without the OS open dialog.
+  ipcMain.removeHandler('data:import-file')
   ipcMain.handle('data:import-file', (_event, { mode, filePath }: { mode: 'merge' | 'replace'; filePath: string }) => {
     const db = getDb()
     const raw = fs.readFileSync(filePath, 'utf-8')

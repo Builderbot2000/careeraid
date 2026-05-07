@@ -18,19 +18,34 @@ function LockRow({ label, locked, testId }: { label: string; locked: boolean; te
 
 export default function Settings({ featureLocks }: Props): React.ReactElement {
     const [settings, setSettings] = useState<SettingsType | null>(null)
+    const [draft, setDraft] = useState<SettingsType | null>(null)
     const [apiKeyInput, setApiKeyInput] = useState('')
     const [apiKeyPresent, setApiKeyPresent] = useState(false)
     const [saving, setSaving] = useState(false)
     const [msg, setMsg] = useState('')
     const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
+    const [refreshing, setRefreshing] = useState(false)
+    const [savedGroup, setSavedGroup] = useState<string | null>(null)
+
     useEffect(() => {
-        window.api.getSettings().then(setSettings)
+        window.api.getSettings().then((s) => {
+            setSettings(s)
+            setDraft(s)
+        })
         window.api.getApiKeyPresent().then(setApiKeyPresent)
     }, [])
 
-    async function saveSetting<K extends keyof SettingsType>(key: K, value: SettingsType[K]): Promise<void> {
-        await window.api.updateSetting(key, value)
-        setSettings((prev) => prev ? { ...prev, [key]: value } : prev)
+    function flashSaved(group: string): void {
+        setSavedGroup(group)
+        setTimeout(() => setSavedGroup((cur) => cur === group ? null : cur), 2000)
+    }
+
+    async function saveGroup(group: string, fields: Partial<SettingsType>): Promise<void> {
+        for (const [key, value] of Object.entries(fields) as [keyof SettingsType, SettingsType[keyof SettingsType]][]) {
+            await window.api.updateSetting(key, value)
+        }
+        setSettings((prev) => prev ? { ...prev, ...fields } : prev)
+        flashSaved(group)
     }
 
     async function handleSetApiKey(): Promise<void> {
@@ -54,7 +69,16 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
         setMsg('API key removed.')
     }
 
-    if (!settings) return <div>Loading settings…</div>
+    async function handleRefreshLocks(): Promise<void> {
+        setRefreshing(true)
+        try {
+            await window.api.refreshFeatureLocks()
+        } finally {
+            setRefreshing(false)
+        }
+    }
+
+    if (!settings || !draft) return <div>Loading settings…</div>
 
     return (
         <div>
@@ -62,7 +86,18 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
 
             {/* Feature status */}
             <div className="card">
-                <h2>Feature Status</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <h2 style={{ margin: 0 }}>Feature Status</h2>
+                    <button
+                        data-testid="settings-refresh-locks-btn"
+                        className="btn"
+                        onClick={handleRefreshLocks}
+                        disabled={refreshing}
+                        style={{ fontSize: 13 }}
+                    >
+                        {refreshing ? 'Checking…' : 'Refresh'}
+                    </button>
+                </div>
                 <LockRow label="Claude API key" locked={featureLocks.claudeApiKey} testId="settings-lock-claudeApiKey" />
                 <LockRow label="Claude connectivity" locked={featureLocks.claudeConnectivity} testId="settings-lock-claudeConnectivity" />
                 <LockRow label="Typst" locked={featureLocks.typst} testId="settings-lock-typst" />
@@ -110,10 +145,16 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                     <label>PDF export path</label>
                     <input
                         type="text"
-                        value={settings.pdf_export_path ?? ''}
+                        value={draft.pdf_export_path ?? ''}
                         placeholder="~/Downloads"
-                        onChange={(e) => saveSetting('pdf_export_path', e.target.value || null)}
+                        onChange={(e) => setDraft((p) => p ? { ...p, pdf_export_path: e.target.value || null } : p)}
                     />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <button data-testid="settings-save-paths" className="btn btn-primary" onClick={() => saveGroup('paths', { pdf_export_path: draft.pdf_export_path })}>
+                        Save
+                    </button>
+                    {savedGroup === 'paths' && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Saved</span>}
                 </div>
             </div>
 
@@ -127,8 +168,8 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         type="number"
                         min={500}
                         max={30000}
-                        value={settings.crawl_delay_ms}
-                        onChange={(e) => saveSetting('crawl_delay_ms', Number(e.target.value))}
+                        value={draft.crawl_delay_ms}
+                        onChange={(e) => setDraft((p) => p ? { ...p, crawl_delay_ms: Number(e.target.value) } : p)}
                     />
                     <div className="form-hint">Delay between page fetches (default 3000 ms).</div>
                 </div>
@@ -139,8 +180,8 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         type="number"
                         min={1}
                         max={365}
-                        value={settings.posting_retention_days}
-                        onChange={(e) => saveSetting('posting_retention_days', Number(e.target.value))}
+                        value={draft.posting_retention_days}
+                        onChange={(e) => setDraft((p) => p ? { ...p, posting_retention_days: Number(e.target.value) } : p)}
                     />
                     <div className="form-hint">Non-favorited postings are soft-deleted after this many days.</div>
                 </div>
@@ -150,10 +191,20 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         type="number"
                         min={1}
                         max={50}
-                        value={settings.parse_error_abort_threshold}
-                        onChange={(e) => saveSetting('parse_error_abort_threshold', Number(e.target.value))}
+                        value={draft.parse_error_abort_threshold}
+                        onChange={(e) => setDraft((p) => p ? { ...p, parse_error_abort_threshold: Number(e.target.value) } : p)}
                     />
                     <div className="form-hint">Consecutive parse failures before a scraper mod is aborted.</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <button data-testid="settings-save-scraping" className="btn btn-primary" onClick={() => saveGroup('scraping', {
+                        crawl_delay_ms: draft.crawl_delay_ms,
+                        posting_retention_days: draft.posting_retention_days,
+                        parse_error_abort_threshold: draft.parse_error_abort_threshold,
+                    })}>
+                        Save
+                    </button>
+                    {savedGroup === 'scraping' && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Saved</span>}
                 </div>
             </div>
 
@@ -167,8 +218,8 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         type="number"
                         min={50}
                         max={1000}
-                        value={settings.profile_entry_word_limit}
-                        onChange={(e) => saveSetting('profile_entry_word_limit', Number(e.target.value))}
+                        value={draft.profile_entry_word_limit}
+                        onChange={(e) => setDraft((p) => p ? { ...p, profile_entry_word_limit: Number(e.target.value) } : p)}
                     />
                 </div>
                 <div className="form-row">
@@ -178,10 +229,19 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         min={10000}
                         max={200000}
                         step={1000}
-                        value={settings.affinity_token_budget}
-                        onChange={(e) => saveSetting('affinity_token_budget', Number(e.target.value))}
+                        value={draft.affinity_token_budget}
+                        onChange={(e) => setDraft((p) => p ? { ...p, affinity_token_budget: Number(e.target.value) } : p)}
                     />
                     <div className="form-hint">Max input tokens per affinity scoring batch (default 80,000).</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <button data-testid="settings-save-profile-llm" className="btn btn-primary" onClick={() => saveGroup('profile-llm', {
+                        profile_entry_word_limit: draft.profile_entry_word_limit,
+                        affinity_token_budget: draft.affinity_token_budget,
+                    })}>
+                        Save
+                    </button>
+                    {savedGroup === 'profile-llm' && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Saved</span>}
                 </div>
             </div>
 
@@ -239,8 +299,8 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                     <label htmlFor="settings-log-level">Log level</label>
                     <select
                         id="settings-log-level"
-                        value={settings.log_level}
-                        onChange={(e) => saveSetting('log_level', e.target.value as SettingsType['log_level'])}
+                        value={draft.log_level}
+                        onChange={(e) => setDraft((p) => p ? { ...p, log_level: e.target.value as SettingsType['log_level'] } : p)}
                     >
                         <option value="error">error</option>
                         <option value="warn">warn</option>
@@ -254,9 +314,18 @@ export default function Settings({ featureLocks }: Props): React.ReactElement {
                         type="number"
                         min={1}
                         max={365}
-                        value={settings.log_retention_days}
-                        onChange={(e) => saveSetting('log_retention_days', Number(e.target.value))}
+                        value={draft.log_retention_days}
+                        onChange={(e) => setDraft((p) => p ? { ...p, log_retention_days: Number(e.target.value) } : p)}
                     />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                    <button data-testid="settings-save-logging" className="btn btn-primary" onClick={() => saveGroup('logging', {
+                        log_level: draft.log_level,
+                        log_retention_days: draft.log_retention_days,
+                    })}>
+                        Save
+                    </button>
+                    {savedGroup === 'logging' && <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Saved</span>}
                 </div>
             </div>
         </div>

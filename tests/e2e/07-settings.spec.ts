@@ -36,7 +36,7 @@ test.describe('Settings Module', () => {
     await goTo(page, 'Settings')
     const crawlDelayInput = page.getByLabel(/Crawl delay/i)
     await crawlDelayInput.fill('5000')
-    await page.getByRole('button', { name: /Save|Apply/i }).first().click()
+    await page.getByTestId('settings-save-scraping').click()
 
     // Navigate away and back
     await goTo(page, 'Profile')
@@ -48,7 +48,7 @@ test.describe('Settings Module', () => {
     await goTo(page, 'Settings')
     const retentionInput = page.getByLabel(/Retention days|retention/i)
     await retentionInput.fill('30')
-    await page.getByRole('button', { name: /Save|Apply/i }).first().click()
+    await page.getByTestId('settings-save-scraping').click()
 
     await goTo(page, 'Profile')
     await goTo(page, 'Settings')
@@ -59,10 +59,27 @@ test.describe('Settings Module', () => {
     await goTo(page, 'Settings')
     const logLevelSelect = page.getByLabel(/Log level/i)
     await logLevelSelect.selectOption('debug')
-    await page.getByRole('button', { name: /Save|Apply/i }).first().click()
+    await page.getByTestId('settings-save-logging').click()
 
     await goTo(page, 'Profile')
     await goTo(page, 'Settings')
     await expect(page.getByLabel(/Log level/i)).toHaveValue('debug')
+  })
+
+  test('save buttons show a "Saved" flash confirmation', async ({ page }) => {
+    await goTo(page, 'Settings')
+    await page.getByLabel(/Crawl delay/i).fill('4000')
+    await page.getByTestId('settings-save-scraping').click()
+    await expect(page.getByText('Saved').first()).toBeVisible({ timeout: 3_000 })
+  })
+
+  test('feature lock Refresh button re-checks and updates the display', async ({ page }) => {
+    await goTo(page, 'Settings')
+    const refreshBtn = page.getByTestId('settings-refresh-locks-btn')
+    await expect(refreshBtn).toBeVisible()
+    await refreshBtn.click()
+    // Button should momentarily show "Checking…" then return to "Refresh"
+    await expect(refreshBtn).toBeEnabled({ timeout: 5_000 })
+    await expect(refreshBtn).toHaveText('Refresh')
   })
 })

@@ -10,6 +10,7 @@ import type {
   SearchConfigRow,
   SearchTerm,
   AddSearchTermData,
+  GenConstraints,
   BanListEntry,
   JobPosting,
   AdapterProgress,
@@ -25,6 +26,10 @@ contextBridge.exposeInMainWorld('api', {
   // ── Startup ────────────────────────────────────────────────────────────────
   onFeatureLocks(cb: (locks: FeatureLocks) => void): void {
     ipcRenderer.on('startup:feature-locks', (_event, locks: FeatureLocks) => cb(locks))
+  },
+
+  refreshFeatureLocks(): Promise<void> {
+    return ipcRenderer.invoke('startup:refresh-locks')
   },
 
   // ── Settings ───────────────────────────────────────────────────────────────
@@ -78,6 +83,10 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('profile:set-yoe', yoe)
   },
 
+  setUserQualifications(quals: unknown): Promise<void> {
+    return ipcRenderer.invoke('profile:set-qualifications', quals)
+  },
+
   exportProfileMarkdown(): Promise<string | null> {
     return ipcRenderer.invoke('profile:export')
   },
@@ -125,12 +134,12 @@ contextBridge.exposeInMainWorld('api', {
     return ipcRenderer.invoke('search-terms:get')
   },
 
-  generateSearchTerms(): Promise<SearchTerm[]> {
-    return ipcRenderer.invoke('search-terms:generate')
+  generateSearchTerms(constraints?: GenConstraints): Promise<SearchTerm[]> {
+    return ipcRenderer.invoke('search-terms:generate', constraints)
   },
 
-  generateSearchTermsFromProfile(): Promise<SearchTerm[]> {
-    return ipcRenderer.invoke('search-terms:generate-from-profile')
+  generateSearchTermsFromProfile(constraints?: GenConstraints): Promise<SearchTerm[]> {
+    return ipcRenderer.invoke('search-terms:generate-from-profile', constraints)
   },
 
   updateSearchTerm(id: string, updates: {

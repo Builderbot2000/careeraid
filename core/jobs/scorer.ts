@@ -4,7 +4,7 @@ import Database from 'better-sqlite3'
 import type { JobPosting } from './adapters/base'
 import { writeLLMUsage } from './llmUsage'
 import { serializeProfile } from '../resume/agent'
-import { getAllEntries } from '../profile/repository'
+import { getAllEntries, getUserProfile } from '../profile/repository'
 
 const MODEL = 'claude-haiku-4-5'
 
@@ -53,6 +53,28 @@ type AffinityResult = z.infer<typeof AffinityResultSchema>
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
+interface CandidateFacts {
+  yoe: number | null
+  yoe_industry: string | null
+  languages: string[]
+  citizenship: string | null
+  drivers_license: boolean
+}
+
+function buildCandidateFactsBlock(facts: CandidateFacts): string {
+  const lines: string[] = []
+  if (facts.yoe !== null) {
+    const industry = facts.yoe_industry ? ` (industry: ${facts.yoe_industry})` : ''
+    lines.push(`- Total professional experience: ${facts.yoe} years${industry}`)
+  }
+  if (facts.citizenship) lines.push(`- Citizenship / visa: ${facts.citizenship}`)
+  if (facts.languages.length) lines.push(`- Languages: ${facts.languages.join(', ')}`)
+  if (facts.drivers_license) lines.push(`- Driver's licence: Yes`)
+  return lines.length
+    ? `## Candidate Facts (Authoritative)\nThese are ground-truth facts — they override any inferences from the profile text below.\n${lines.join('\n')}`
+    : ''
+}
+
 function buildScoringPrompt(
   postingId: string,
   title: string,
@@ -60,12 +82,14 @@ function buildScoringPrompt(
   jobDescription: string,
   serializedProfile: string,
   intent: string,
+  candidateFacts: CandidateFacts,
 ): string {
+  const factsBlock = buildCandidateFactsBlock(candidateFacts)
   return `You are a job-fit evaluator. Analyse whether the candidate meets this job's requirements.
 
 ## Search Intent
 ${intent}
-
+${factsBlock ? `\n${factsBlock}\n` : ''}
 ## Candidate Profile
 ${serializedProfile.slice(0, 6000)}
 
@@ -98,11 +122,13 @@ ${jobDescription.slice(0, 3000)}
 
 ## Classification Guide
 
-hard_reqs_class:
-- overqualified: candidate clearly exceeds all hard requirements (e.g. 10 YOE for a 2-3 YOE role)
-- fully_qualified: candidate meets all hard requirements
-- minimally_qualified: candidate meets most but has one notable gap (missing a required skill or slightly below YOE minimum)
-- underqualified: candidate fails to meet multiple hard requirements
+hard_reqs_class — treat hard requirements as gates, not sliding scales:
+- overqualified: candidate clearly exceeds ALL hard requirements (e.g. 10 YOE for a 2–3 YOE role)
+- fully_qualified: candidate meets ALL hard requirements
+- minimally_qualified: candidate meets all hard requirements except exactly one minor non-YOE gap (e.g. missing one peripheral skill that is listed as required but not central to the role)
+- underqualified: candidate fails ANY of the following — YOE below yoe_min (use Candidate Facts YOE, not inferred from profile dates), missing a core required skill, missing a mandatory qualification (citizenship, language, licence)
+
+IMPORTANT: If the Candidate Facts section states a YOE and the job requires more, classify as underqualified regardless of how the profile text reads. Never estimate YOE from experience entry dates when an authoritative value is provided.
 
 nice_to_haves_class:
 - fully_met: candidate meets all or nearly all nice-to-haves
@@ -156,6 +182,15 @@ export async function scorePostings(
   const profileEntries = getAllEntries(db)
   const serializedProfile = serializeProfile(profileEntries)
 
+  const userProfile = getUserProfile(db)
+  const candidateFacts: CandidateFacts = {
+    yoe: userProfile.yoe,
+    yoe_industry: userProfile.yoe_industry,
+    languages: userProfile.languages,
+    citizenship: userProfile.citizenship,
+    drivers_license: userProfile.drivers_license,
+  }
+
   const client = new Anthropic({ apiKey })
   const now = new Date().toISOString()
 
@@ -197,6 +232,7 @@ export async function scorePostings(
               jd,
               serializedProfile,
               intent,
+              candidateFacts,
             ),
           },
         ],
@@ -262,6 +298,14 @@ export async function scorePosting(
     (db.prepare('SELECT intent FROM search_config WHERE id = 1').get() as { intent: string | null })
       ?.intent ?? ''
   const serializedProfile = serializeProfile(getAllEntries(db))
+  const userProfile = getUserProfile(db)
+  const candidateFacts: CandidateFacts = {
+    yoe: userProfile.yoe,
+    yoe_industry: userProfile.yoe_industry,
+    languages: userProfile.languages,
+    citizenship: userProfile.citizenship,
+    drivers_license: userProfile.drivers_license,
+  }
   const client = new Anthropic({ apiKey })
   const now = new Date().toISOString()
 
@@ -291,7 +335,7 @@ export async function scorePosting(
         {
           role: 'user',
           content: buildScoringPrompt(
-            posting.id, posting.title, posting.company, jd, serializedProfile, intent,
+            posting.id, posting.title, posting.company, jd, serializedProfile, intent, candidateFacts,
           ),
         },
       ],

@@ -6,6 +6,7 @@ import type {
     CaptchaRequest,
     LoginRequest,
     AddSearchTermData,
+    GenConstraints,
     SearchTermSeniority,
     WorkType,
     Recency,
@@ -52,6 +53,7 @@ export function IntentTab({
 
     const emptyTermData: AddSearchTermData = { role: '', locations: null, seniorities: null, work_type: null, recency: null, max_results: null }
     const [newTermData, setNewTermData] = useState<AddSearchTermData>(emptyTermData)
+    const [genConstraints, setGenConstraints] = useState<GenConstraints>({ locations: null, seniorities: null, work_type: null, recency: null, max_results: null })
     const [editingId, setEditingId] = useState<string | null>(null)
     const intentRef = useRef(intent)
     intentRef.current = intent
@@ -73,7 +75,7 @@ export function IntentTab({
         setGenerating(true)
         setGenerateError(null)
         try {
-            const generated = await window.api.generateSearchTerms()
+            const generated = await window.api.generateSearchTerms(genConstraints)
             setTerms((prev) => [...prev, ...generated])
         } catch (err) {
             setGenerateError(err instanceof Error ? err.message : String(err))
@@ -86,7 +88,7 @@ export function IntentTab({
         setGenerating(true)
         setGenerateError(null)
         try {
-            const generated = await window.api.generateSearchTermsFromProfile()
+            const generated = await window.api.generateSearchTermsFromProfile(genConstraints)
             setTerms((prev) => [...prev, ...generated])
         } catch (err) {
             setGenerateError(err instanceof Error ? err.message : String(err))
@@ -177,6 +179,90 @@ export function IntentTab({
                         resize: 'vertical',
                     }}
                 />
+            </section>
+
+            {/* Generation constraints */}
+            <section style={{ marginBottom: '28px' }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: '6px' }}>
+                    Generation Constraints <span style={{ fontWeight: 400, fontSize: '0.8rem', color: '#6b7280' }}>(optional — applied to all generated terms)</span>
+                </label>
+                <div data-testid="gen-constraints" style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', background: '#f9fafb' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '3px' }}>Location(s)</label>
+                            <LocationTagInput
+                                values={genConstraints.locations ?? []}
+                                onChange={(tags) => setGenConstraints((p) => ({ ...p, locations: tags.length ? tags : null }))}
+                            />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '5px' }}>Seniority</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {(['intern', 'junior', 'mid', 'senior', 'staff'] as SearchTermSeniority[]).map((level) => (
+                                    <label key={level} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.825rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={(genConstraints.seniorities ?? []).includes(level)}
+                                            onChange={(e) => {
+                                                setGenConstraints((p) => {
+                                                    const cur = p.seniorities ?? []
+                                                    const next = e.target.checked ? [...cur, level] : cur.filter((s) => s !== level)
+                                                    return { ...p, seniorities: next.length ? next : null }
+                                                })
+                                            }}
+                                        />
+                                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '5px' }}>Work Type</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {(['remote', 'hybrid', 'onsite'] as WorkType[]).map((wt) => (
+                                    <label key={wt} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.825rem', cursor: 'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={(genConstraints.work_type ?? []).includes(wt)}
+                                            onChange={(e) => {
+                                                setGenConstraints((p) => {
+                                                    const cur = p.work_type ?? []
+                                                    const next = e.target.checked ? [...cur, wt] : cur.filter((w) => w !== wt)
+                                                    return { ...p, work_type: next.length ? next : null }
+                                                })
+                                            }}
+                                        />
+                                        {wt.charAt(0).toUpperCase() + wt.slice(1)}
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '3px' }}>Recency</label>
+                            <select
+                                value={genConstraints.recency ?? ''}
+                                onChange={(e) => setGenConstraints((p) => ({ ...p, recency: (e.target.value || null) as Recency | null }))}
+                                style={{ width: '100%', boxSizing: 'border-box', padding: '5px 7px', fontSize: '0.875rem', border: '1px solid #d1d5db', borderRadius: '4px', fontFamily: 'inherit', background: 'white' }}
+                            >
+                                <option value="">Any time</option>
+                                <option value="day">Past day</option>
+                                <option value="week">Past week</option>
+                                <option value="month">Past month</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', marginBottom: '3px' }}>Max results</label>
+                            <input
+                                type="number"
+                                min={1}
+                                value={genConstraints.max_results ?? ''}
+                                onChange={(e) => setGenConstraints((p) => ({ ...p, max_results: e.target.value ? parseInt(e.target.value, 10) : null }))}
+                                placeholder="unlimited"
+                                style={{ width: '100%', boxSizing: 'border-box', padding: '5px 7px', fontSize: '0.875rem', border: '1px solid #d1d5db', borderRadius: '4px', fontFamily: 'inherit' }}
+                            />
+                        </div>
+                    </div>
+                </div>
             </section>
 
             {/* Search Terms */}

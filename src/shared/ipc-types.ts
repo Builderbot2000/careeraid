@@ -21,6 +21,17 @@ export interface ProfileEntry {
 export interface UserProfile {
   id: number
   yoe: number | null
+  yoe_industry: string | null
+  languages: string[]
+  citizenship: string | null
+  drivers_license: boolean
+}
+
+export interface UserQualificationsInput {
+  yoe_industry: string | null
+  languages: string[]
+  citizenship: string | null
+  drivers_license: boolean
 }
 
 export type CreateProfileEntryInput = Omit<ProfileEntry, 'id' | 'created_at'>
@@ -138,6 +149,7 @@ export interface ScrapeSummary {
   netNew: number
   ban_excluded: number
   keyword_filtered: number
+  term_filtered: number
 }
 
 export interface AdapterInfo {
@@ -183,6 +195,14 @@ export interface SearchTerm {
 
 export interface AddSearchTermData {
   role: string
+  locations?: string[] | null
+  seniorities?: SearchTermSeniority[] | null
+  work_type?: WorkType[] | null
+  recency?: Recency | null
+  max_results?: number | null
+}
+
+export interface GenConstraints {
   locations?: string[] | null
   seniorities?: SearchTermSeniority[] | null
   work_type?: WorkType[] | null
@@ -285,6 +305,7 @@ export interface FeatureLocks {
 /** Shape of window.api as exposed by the context bridge. */
 export interface ElectronAPI {
   onFeatureLocks(cb: (locks: FeatureLocks) => void): void
+  refreshFeatureLocks(): Promise<void>
   getSettings(): Promise<Settings>
   updateSetting(key: SettingKey, value: Settings[SettingKey]): Promise<void>
   getApiKeyPresent(): Promise<boolean>
@@ -299,6 +320,7 @@ export interface ElectronAPI {
   deleteProfileEntry(id: string): Promise<void>
   getUserProfile(): Promise<UserProfile>
   setUserYoe(yoe: number | null): Promise<void>
+  setUserQualifications(quals: UserQualificationsInput): Promise<void>
   exportProfileMarkdown(): Promise<string | null>
   importProfileMarkdown(): Promise<{ added: number; skipped: number } | null>
   importProfileFromResumePdf(): Promise<{ added: number; entries: ProfileEntry[] } | null>
@@ -320,8 +342,8 @@ export interface ElectronAPI {
 
   // Search terms
   getSearchTerms(): Promise<SearchTerm[]>
-  generateSearchTerms(): Promise<SearchTerm[]>
-  generateSearchTermsFromProfile(): Promise<SearchTerm[]>
+  generateSearchTerms(constraints?: GenConstraints): Promise<SearchTerm[]>
+  generateSearchTermsFromProfile(constraints?: GenConstraints): Promise<SearchTerm[]>
   updateSearchTerm(id: string, updates: {
     term?: string
     enabled?: boolean

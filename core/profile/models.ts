@@ -24,7 +24,20 @@ export type ProfileEntry = z.infer<typeof ProfileEntrySchema>
 export const UserProfileSchema = z.object({
   id: z.number(),
   yoe: z.number().int().nonnegative().nullable(),
+  yoe_industry: z.string().nullable(),
+  languages: z.array(z.string()),
+  citizenship: z.string().nullable(),
+  drivers_license: z.boolean(),
 })
+
+export const UserQualificationsSchema = z.object({
+  yoe_industry: z.string().nullable(),
+  languages: z.array(z.string()),
+  citizenship: z.string().nullable(),
+  drivers_license: z.boolean(),
+})
+
+export type UserQualificationsInput = z.infer<typeof UserQualificationsSchema>
 
 export type UserProfile = z.infer<typeof UserProfileSchema>
 

@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import { getDb } from '../../db/database'
 import { getApiKey } from '../settings'
 import { generateSearchTerms, generateSearchTermsFromProfile } from '../../core/jobs/searchTermGen'
-import type { SearchTerm, AddSearchTermData, SearchTermSeniority, WorkType, Recency } from '../../src/shared/ipc-types'
+import type { SearchTerm, AddSearchTermData, SearchTermSeniority, WorkType, Recency, GenConstraints } from '../../src/shared/ipc-types'
 import { randomUUID } from 'crypto'
 
 export function registerSearchHandlers(): void {
@@ -54,7 +54,7 @@ export function registerSearchHandlers(): void {
     }))
   })
 
-  ipcMain.handle('search-terms:generate', async () => {
+  ipcMain.handle('search-terms:generate', async (_event, constraints?: GenConstraints) => {
     const key = getApiKey()
     if (!key) throw new Error('No API key stored — set one in Settings first')
     const config = getDb()
@@ -62,13 +62,13 @@ export function registerSearchHandlers(): void {
       .get() as { intent: string | null } | undefined
     const intent = config?.intent ?? ''
     if (!intent.trim()) throw new Error('Set a search intent before generating terms')
-    return generateSearchTerms(getDb(), key, intent)
+    return generateSearchTerms(getDb(), key, intent, constraints)
   })
 
-  ipcMain.handle('search-terms:generate-from-profile', async () => {
+  ipcMain.handle('search-terms:generate-from-profile', async (_event, constraints?: GenConstraints) => {
     const key = getApiKey()
     if (!key) throw new Error('No API key stored — set one in Settings first')
-    return generateSearchTermsFromProfile(getDb(), key)
+    return generateSearchTermsFromProfile(getDb(), key, constraints)
   })
 
   ipcMain.handle(
