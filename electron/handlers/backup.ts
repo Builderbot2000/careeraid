@@ -26,6 +26,7 @@ export function registerBackupHandlers(): void {
     const payload = {
       version: 1,
       exported_at: new Date().toISOString(),
+      user_profile: db.prepare('SELECT * FROM user_profile WHERE id = 1').get(),
       profile_entries: db.prepare('SELECT * FROM profile_entries').all(),
       search_config: db.prepare('SELECT * FROM search_config WHERE id = 1').get(),
       search_terms: db.prepare('SELECT * FROM search_terms').all(),
@@ -69,6 +70,9 @@ function runImport(filePath: string, mode: 'merge' | 'replace'): { imported: num
       db.prepare('DELETE FROM profile_entries').run()
       db.prepare('DELETE FROM search_terms').run()
       db.prepare('DELETE FROM ban_list').run()
+      db.prepare(
+        `UPDATE user_profile SET yoe = NULL, yoe_industry = '[]', languages = '[]', citizenship = '[]', drivers_license = 0 WHERE id = 1`,
+      ).run()
     }
 
     if (Array.isArray(payload.profile_entries)) {
@@ -119,6 +123,19 @@ function runImport(filePath: string, mode: 'merge' | 'replace'): { imported: num
           imported++
         }
       }
+    }
+
+    if (payload.user_profile && typeof payload.user_profile === 'object') {
+      const up = payload.user_profile as Record<string, unknown>
+      db.prepare(
+        `UPDATE user_profile SET yoe = ?, yoe_industry = ?, languages = ?, citizenship = ?, drivers_license = ? WHERE id = 1`,
+      ).run(
+        up.yoe ?? null,
+        typeof up.yoe_industry === 'string' ? up.yoe_industry : '[]',
+        typeof up.languages === 'string' ? up.languages : '[]',
+        typeof up.citizenship === 'string' ? up.citizenship : '[]',
+        up.drivers_license ?? 0,
+      )
     }
   })()
 
