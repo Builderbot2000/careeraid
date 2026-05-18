@@ -107,6 +107,18 @@ export function IntentTab({
         setTerms((prev) => prev.filter((t) => t.id !== id))
     }
 
+    async function handleDuplicate(t: SearchTerm): Promise<void> {
+        const added = await window.api.addSearchTerm({
+            role: `${t.term} (copy)`,
+            locations: t.locations,
+            seniorities: t.seniorities,
+            work_type: t.work_type,
+            recency: t.recency,
+            max_results: t.max_results,
+        })
+        setTerms((prev) => [...prev, added])
+    }
+
     function openEdit(t: SearchTerm): void {
         setEditingId(t.id)
         setNewTermData({ role: t.term, locations: t.locations, seniorities: t.seniorities, work_type: t.work_type, recency: t.recency, max_results: t.max_results })
@@ -373,6 +385,22 @@ export function IntentTab({
                                     title="Edit"
                                 >
                                     ✎
+                                </button>
+                                <button
+                                    data-testid={`search-term-duplicate-${t.id}`}
+                                    onClick={() => handleDuplicate(t)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: '#6b7280',
+                                        padding: '0 4px',
+                                        fontSize: '0.85rem',
+                                        flexShrink: 0,
+                                    }}
+                                    title="Duplicate"
+                                >
+                                    ⎘
                                 </button>
                                 <button
                                     data-testid={`search-term-delete-${t.id}`}

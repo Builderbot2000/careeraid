@@ -108,6 +108,78 @@ test.describe('Search Term Management', () => {
     await expect(page.getByText('fullstack developer')).toBeVisible()
   })
 
+  test('duplicating a term creates a (copy) with the same hard reqs, tagged manual', async ({ page }) => {
+    await goTo(page, 'Search')
+
+    // Add a term with structured fields so we can verify they carry over
+    await page.getByTestId('search-add-role').fill('backend engineer original')
+    await page.getByTestId('search-add-recency').selectOption('week')
+    await page.getByTestId('search-add-max-results').fill('25')
+    await page.getByTestId('search-add-btn').click()
+
+    const originalRow = page.locator('li').filter({ hasText: 'backend engineer original' })
+    await expect(originalRow).toBeVisible()
+    await expect(originalRow.getByText('past week', { exact: true })).toBeVisible()
+    await expect(originalRow.getByText('max 25', { exact: true })).toBeVisible()
+
+    // Click duplicate
+    await originalRow.getByTitle('Duplicate').click()
+
+    // A new row with the "(copy)" suffix should appear, carrying the same chips
+    const copyRow = page.locator('li').filter({ hasText: 'backend engineer original (copy)' })
+    await expect(copyRow).toBeVisible()
+    await expect(copyRow.getByText('past week', { exact: true })).toBeVisible()
+    await expect(copyRow.getByText('max 25', { exact: true })).toBeVisible()
+    // Tagged as user-added (manual), not AI
+    await expect(copyRow.getByText(/manual|user_added/i)).toBeVisible()
+    // Default-enabled
+    await expect(copyRow.getByRole('checkbox')).toBeChecked()
+
+    // Original remains
+    await expect(originalRow).toBeVisible()
+  })
+
+  test('duplicated term persists across a view reload', async ({ page }) => {
+    await goTo(page, 'Search')
+
+    await page.getByTestId('search-add-role').fill('persist after duplicate')
+    await page.getByTestId('search-add-btn').click()
+
+    const row = page.locator('li').filter({ hasText: /^persist after duplicate$/ })
+    await expect(row).toBeVisible()
+    await row.getByTitle('Duplicate').click()
+    await expect(page.locator('li').filter({ hasText: 'persist after duplicate (copy)' })).toBeVisible()
+
+    // Navigate away and back
+    await goTo(page, 'Profile')
+    await goTo(page, 'Search')
+
+    await expect(page.locator('li').filter({ hasText: 'persist after duplicate (copy)' })).toBeVisible()
+  })
+
+  test('editing a duplicated term renames it without affecting the original', async ({ page }) => {
+    await goTo(page, 'Search')
+
+    await page.getByTestId('search-add-role').fill('source term')
+    await page.getByTestId('search-add-btn').click()
+
+    const source = page.locator('li').filter({ hasText: /^source term$/ })
+    await expect(source).toBeVisible()
+    await source.getByTitle('Duplicate').click()
+
+    const copyRow = page.locator('li').filter({ hasText: 'source term (copy)' })
+    await expect(copyRow).toBeVisible()
+
+    await copyRow.getByTitle('Edit').click()
+    await page.getByTestId('search-add-role').fill('renamed variant')
+    await page.getByTestId('search-add-btn').click()
+
+    await expect(page.locator('li').filter({ hasText: 'renamed variant' })).toBeVisible()
+    await expect(page.locator('li').filter({ hasText: 'source term (copy)' })).not.toBeVisible()
+    // Original untouched
+    await expect(page.locator('li').filter({ hasText: /^source term$/ })).toBeVisible()
+  })
+
   test('editing a term updates its role text in the list', async ({ page }) => {
     await goTo(page, 'Search')
     const roleInput = page.getByTestId('search-add-role')
